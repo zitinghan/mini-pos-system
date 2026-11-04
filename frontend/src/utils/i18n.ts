@@ -1,0 +1,39 @@
+// Keep operational labels in one dictionary so a second locale can be added.
+export const zh = {tables:'桌台',orders:'订单',history:'营业记录',settings:'设置',
+  AVAILABLE:'空桌',OCCUPIED:'用餐中',PAYMENT_PENDING:'待结账',
+  PENDING:'等待打印机',SENDING:'正在发送',SENT:'已发送至打印机',FAILED:'打印失败',UNKNOWN:'送达不确定',
+  DRAFT:'草稿 · 未下单',SUBMITTED:'已下单',CANCELLED:'已取消',PAID:'已付款',
+  CASH:'现金',QR:'二维码（人工确认）',OTHER:'其他'};
+export const label=(key:string)=>zh[key as keyof typeof zh]??key;
+
+const errors:Record<string,string> = {
+ 'Base price must be positive; modifier surcharges may be zero':'菜品基础价格必须大于零，选项加价可以为零。',
+ 'Session expired; please sign in':'登录已过期，请重新登录。',
+ 'Cashier/admin permission required':'此操作需要管理员或收银员权限。',
+ 'Use the setup token configured on the server':'设置令牌不正确，请联系部署人员。',
+ 'Administrator already configured':'管理员已设置，请使用现有账户登录。',
+ 'Incorrect name or PIN':'员工名称或 PIN 不正确。',
+ 'Too many login attempts; wait five minutes':'登录尝试过多，请等待五分钟。',
+ 'Account temporarily locked; wait five minutes':'账户暂时锁定，请等待五分钟。',
+ 'User name already exists':'员工名称已存在，请换一个名称。',
+ 'Table session is closed':'此桌已结束，请返回桌台页面。',
+ 'Checkout in progress; cashier must resume ordering first':'此桌正在结账，请让收银员选择“继续加单”。',
+ 'Checkout in progress':'此桌正在结账，暂时不能加单。',
+ 'This draft belongs to another staff member':'此草稿属于其他员工，请联系该员工或管理员。',
+ 'Batch is no longer a draft':'此订单已处理，请刷新查看。',
+ 'Cannot submit an empty order':'请先添加菜品。',
+ 'Bill changed; refresh before collecting payment':'账单已更新，请重新核对金额后收款。',
+ 'Unsubmitted drafts exist; submit or explicitly discard them':'仍有未下单草稿，请先下单或确认丢弃。',
+ 'Insufficient cash':'收到的现金不足。',
+ 'Job is already queued or sending':'该任务正在排队或发送，请稍候。',
+ 'Another attempt for this batch is already queued':'该订单已有重印任务，请勿重复操作。',
+ 'Database busy or unavailable; retry the same request key':'服务器暂时繁忙，请稍后在当前页面重试。',
+ 'Concurrent update conflicts with current state; refresh and retry':'其他设备已更新此订单，请刷新后重试。',
+ 'Submitted items must be paid before closing':'请先收取已下单菜品的费用。',
+ 'Printer must use a private LAN IP address':'请输入打印机的店内局域网 IP 地址。',
+ 'Unknown text encoding':'不支持此文字编码，请检查设置。',
+ 'Simulated connection failure; no bytes sent':'模拟连接失败，订单尚未发送至打印机。',
+ 'Simulated uncertain delivery; verify with kitchen':'模拟送达不确定，请先与厨房核对后再决定是否重印。',
+ 'Worker interrupted or delivery timed out; verify with kitchen before reprinting':'打印服务曾中断，请与厨房核对后再决定是否重印。',
+};
+export const translateError=(message:string)=>errors[message]??message;

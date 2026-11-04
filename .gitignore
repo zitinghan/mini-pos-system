@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+.pytest_cache/
+node_modules/
+dist/
+.env
+*.db
+*.db-shm
+*.db-wal
+data/
+coverage/
+backups/
+frontend/test-results/
+frontend/playwright-report/
+artifacts/
