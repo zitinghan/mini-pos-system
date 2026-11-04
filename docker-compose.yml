@@ -1,0 +1,45 @@
+services:
+  init:
+    build: ./backend
+    command: ["python", "-m", "app.database.initialize"]
+    environment: &environment
+      DATABASE_URL: sqlite:////data/pos.db
+      PRINT_OUTPUT_DIR: /data/tickets
+      SETUP_TOKEN: ${SETUP_TOKEN:-}
+      SESSION_HOURS: ${SESSION_HOURS:-12}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080}
+    volumes: &storage
+      - pos_data:/data
+    restart: "no"
+  backend:
+    build: ./backend
+    environment: *environment
+    volumes: *storage
+    depends_on:
+      init:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=5)"]
+      interval: 10s
+      timeout: 6s
+      retries: 5
+    restart: unless-stopped
+  worker:
+    build: ./backend
+    command: ["python", "-m", "app.printing.worker"]
+    environment: *environment
+    volumes: *storage
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+  frontend:
+    build: ./frontend
+    ports:
+      - "${POS_BIND_ADDRESS:-0.0.0.0}:${POS_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+volumes:
+  pos_data:
