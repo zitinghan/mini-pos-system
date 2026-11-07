@@ -156,6 +156,9 @@ Use the same Compose project and persistent volume when updating or restoring an
 
 ## Kitchen printing
 
+The optional B1 customer amount display can show checkout totals and cash change.
+See [customer display setup](docs/customer-display.md) for the confirmed serial settings.
+
 In **Settings**, choose mock or network mode. For a physical printer, configure its private LAN IP, TCP port (default `9100`), printable dot width, text/raster mode, encoding, command profile, feed, and optional cutter.
 
 Start with raster output for Chinese, 384 dots, and the cutter disabled. Save the configuration, queue a test print, inspect its status, and verify the actual paper. Hardware compatibility must be established on the restaurant network.

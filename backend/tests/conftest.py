@@ -19,6 +19,10 @@ from app.database.seed import seed
 from app.main import app
 from app.models.entities import User
 from app.core.security import hash_pin
+from app.services import customer_display
+
+# Tests must never send amounts to the restaurant's physical customer display.
+customer_display.CONFIG_PATH = ROOT / 'customer-display.json'
 
 @pytest.fixture(autouse=True)
 def database():

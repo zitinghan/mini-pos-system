@@ -59,6 +59,21 @@ export default function Checkout() {
     onSuccess: () => navigate(`/session/${id}`),
   });
 
+  const [displayUnavailable, setDisplayUnavailable] = useState(false);
+  useEffect(() => {
+    if (!id || !bill.data || bill.isError || bill.data.status !== 'PAYMENT_PENDING'
+      || !validOffer || pay.isPending || pay.isSuccess) return;
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void api<{ status: string }>(`/table-sessions/${id}/customer-display`, 'POST', {
+        expected_total: total, final_total: finalTotal,
+      }).then((result) => {
+        if (!cancelled) setDisplayUnavailable(result.status === 'unavailable');
+      }).catch(() => { if (!cancelled) setDisplayUnavailable(true); });
+    }, 300);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [id, total, finalTotal, validOffer, bill.data?.status, bill.isError, pay.isPending, pay.isSuccess]);
+
   if (bill.isPending) return <><Loading /><ErrorBox error={bill.error} /></>;
   const blocked = bill.isError || pay.isPending || !bill.data?.item_count || bill.data?.status !== 'PAYMENT_PENDING'
     || (bill.data?.has_drafts && !discard) || !validOffer
@@ -70,6 +85,7 @@ export default function Checkout() {
       <h1>{bill.data?.table} · 收款</h1>
       <ErrorBox error={bill.error || pay.error || resume.error} />
       {restoredOffer&&<p className="notice">此桌由误收款恢复，原收款已撤销。请重新核对金额及优惠后收款。</p>}
+      {displayUnavailable && <p className="warning">顾客显示屏暂时无法连接，仍可正常收款。</p>}
       {bill.data?.has_prepaid_label && <p className="warning">部分订单已手动标记先付款，请核实已收款项，避免重复收款。此处仍需完成收银记录。</p>}
       {bill.data?.status === 'OCCUPIED' && <p className="notice" role="status">
         此桌已恢复点餐，请返回订单页面重新核对账单并开始结账。

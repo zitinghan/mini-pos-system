@@ -21,6 +21,8 @@ from app.services import custom_items
 from app.services import table_recovery
 from app.schemas.requests import RestoreTable
 from app.schemas.requests import CustomItem, EditCustomItem
+from app.services import customer_display
+from app.schemas.requests import CustomerDisplayAmount
 from app.printing.jobs import job_data
 from app.printing.stations import STATIONS
 
@@ -401,10 +403,13 @@ def session_bill(identity: int, user=Depends(current_user)):
 
 @router.post('/table-sessions/{identity}/checkout')
 def checkout(identity: int, user=Depends(admin)):
-    with transaction() as db:
-        session = orders.active_session(db, identity)
-        session.status = 'PAYMENT_PENDING'
-        return orders.bill(db, identity)
+    with customer_display.lock:
+        with transaction() as db:
+            session = orders.active_session(db, identity)
+            session.status = 'PAYMENT_PENDING'
+            bill = orders.bill(db, identity)
+        customer_display.show_amount(bill['total'])
+        return bill
 
 
 @router.post('/table-sessions/{identity}/resume')
@@ -416,8 +421,26 @@ def resume(identity: int, user=Depends(admin)):
 
 @router.post('/table-sessions/{identity}/payments')
 def payment(identity: int, data: Pay, key: str = Depends(idempotency_key), user=Depends(admin)):
-    with transaction() as db:
-        return orders.pay(db, identity, data, key, user)
+    # Serialize with checkout previews so a late preview cannot overwrite change.
+    with customer_display.lock:
+        with transaction() as db:
+            result = orders.pay(db, identity, data, key, user)
+        # Hardware output is best effort and only happens after payment commits.
+        customer_display.show_amount(result['change'] if result['method'] == 'CASH' else result['total'])
+        return result
+
+
+@router.post('/table-sessions/{identity}/customer-display')
+def checkout_display(identity: int, data: CustomerDisplayAmount, user=Depends(admin)):
+    with customer_display.lock:
+        with transaction() as db:
+            session = orders.active_session(db, identity)
+            bill = orders.bill(db, identity)
+            if session.status != 'PAYMENT_PENDING' or bill['total'] != data.expected_total:
+                raise HTTPException(409, 'Bill changed; refresh checkout')
+            if data.final_total > bill['total']:
+                raise HTTPException(422, 'Display amount exceeds bill total')
+        return customer_display.show_amount(data.final_total)
 
 
 @router.get('/print-jobs')
