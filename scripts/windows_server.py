@@ -9,6 +9,10 @@ from starlette.staticfiles import StaticFiles
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def listen_address():
+    return os.environ.get('POS_BIND_ADDRESS', '0.0.0.0')
+
+
 class FrontendFiles(StaticFiles):
     async def get_response(self, path, scope):
         # Starlette normalizes paths with Windows backslashes on this platform.
@@ -30,4 +34,4 @@ if __name__ == '__main__':
     from app.main import app
 
     app.mount('/', FrontendFiles(directory=ROOT / 'frontend' / 'dist', html=True), name='frontend')
-    uvicorn.run(app, host='127.0.0.1', port=8080, log_config=None)
+    uvicorn.run(app, host=listen_address(), port=8080, log_config=None)

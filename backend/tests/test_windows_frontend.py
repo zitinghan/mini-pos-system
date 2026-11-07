@@ -12,6 +12,18 @@ FrontendFiles = runpy.run_path(
 )['FrontendFiles']
 
 
+def test_windows_server_allows_lan_connections_by_default(monkeypatch):
+    monkeypatch.delenv('POS_BIND_ADDRESS', raising=False)
+    server = runpy.run_path(str(Path(__file__).resolve().parents[2] / 'scripts' / 'windows_server.py'))
+    assert server['listen_address']() == '0.0.0.0'
+
+
+def test_windows_server_can_be_restricted_to_localhost(monkeypatch):
+    monkeypatch.setenv('POS_BIND_ADDRESS', '127.0.0.1')
+    server = runpy.run_path(str(Path(__file__).resolve().parents[2] / 'scripts' / 'windows_server.py'))
+    assert server['listen_address']() == '127.0.0.1'
+
+
 @pytest.fixture
 def frontend_client(tmp_path):
     (tmp_path / 'index.html').write_text('<main>POS frontend</main>', encoding='utf-8')

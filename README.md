@@ -67,7 +67,9 @@ cd ..
 .\Start-POS.cmd
 ```
 
-The launcher applies migrations, seeds the menu and 15 tables, then starts the API, built frontend, and print worker in the background. Open `http://127.0.0.1:8080`. It uses the installed Microsoft YaHei font for CJK ticket rendering and binds to this PC only. Docker is not required.
+The launcher applies migrations, seeds the menu and 15 tables, then starts the API, built frontend, and print worker in the background. Open `http://127.0.0.1:8080` on this PC. It uses the installed Microsoft YaHei font for CJK ticket rendering and listens on the LAN by default. Docker is not required.
+
+For phone access, connect the phone to the same Wi-Fi and use the `http://PC_WIFI_IP:8080` address printed by the launcher. Run `scripts/enable-lan-access.ps1` once in an administrator PowerShell to allow inbound TCP 8080 for the installed Python runtime on Private networks from the local subnet. Keep this PC running and the app started. The Wi-Fi must permit devices to communicate; guest/client-isolated networks cannot reach the PC. The launcher prints the current address each time, since DHCP addresses can change. Set `POS_BIND_ADDRESS=127.0.0.1` in the launch environment if PC-only access is desired.
 
 On first launch, Notepad opens `backend/data/FIRST-RUN.txt` with a generated setup token. Enter your preferred administrator name, a new 6-12 digit PIN, and this token in the app. No administrator PIN is predefined. The private token configuration, database, and ticket previews stay in the ignored `backend/data/` directory. Keep these files private and preserve them when updating the app.
 

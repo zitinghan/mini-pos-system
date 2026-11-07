@@ -6,6 +6,8 @@ This workspace is the development PC. Do not configure its network interface, in
 
 ## First deployment
 
+For the native Windows installation, the built frontend and API share port 8080 and listen on `0.0.0.0` by default. Connect a phone to the same Wi-Fi and open the PC's current IPv4 address on port 8080, as printed by `Start-POS.cmd`. Run `scripts/enable-lan-access.ps1` in an administrator PowerShell once to add the Python-specific TCP 8080 inbound rule for Private networks and LocalSubnet clients. This does not change the network profile, disable the firewall, or configure the router. Keep the host and application running. PC-only mode remains available through the `POS_BIND_ADDRESS=127.0.0.1` launch environment setting. Phone browser access over LAN HTTP does not require an installable PWA.
+
 Copy `.env.example` to `.env`; generate a unique setup token locally and set `SETUP_TOKEN`. Configure `POS_BIND_ADDRESS`, `POS_PORT` and exact allowed `CORS_ORIGINS` if cross-origin access is needed. Same-origin Nginx access needs no CORS exception. Run:
 
 ```bash

@@ -5,6 +5,12 @@ $pythonPath = Join-Path $projectRoot '.venv\Scripts\python.exe'
 $dataDir = Join-Path $projectRoot 'backend\data'
 $logDir = Join-Path $projectRoot 'artifacts\windows'
 $appUrl = 'http://127.0.0.1:8080'
+function Show-PhoneAccess {
+    try {
+        $addresses = @(Get-NetIPConfiguration -ErrorAction Stop | Where-Object { $_.IPv4DefaultGateway } | ForEach-Object { $_.IPv4Address.IPAddress })
+        foreach ($address in $addresses) { Write-Output "Phone on the same Wi-Fi: http://${address}:8080" }
+    } catch { Write-Output 'Phone access: use this PC Wi-Fi IPv4 address on port 8080.' }
+}
 New-Item -ItemType Directory -Path $dataDir,$logDir -Force | Out-Null
 if (-not (Test-Path -LiteralPath $pythonPath)) { throw 'Install the Python environment first; see README.md.' }
 if (-not (Test-Path -LiteralPath (Join-Path $projectRoot 'frontend\dist\index.html'))) { throw 'Build the frontend first: cd frontend; npm ci; npm run build' }
@@ -13,6 +19,7 @@ try { $health = Invoke-RestMethod "$appUrl/api/health" -TimeoutSec 3; $running =
 if ($running) {
     if (-not $NoBrowser) { Start-Process $appUrl }
     Write-Output "POS is running at $appUrl"
+    Show-PhoneAccess
     return
 }
 $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, 8080)
@@ -68,3 +75,4 @@ if ($setup.setup_required) {
 }
 if (-not $NoBrowser) { Start-Process $appUrl }
 Write-Output "POS is running at $appUrl"
+Show-PhoneAccess
