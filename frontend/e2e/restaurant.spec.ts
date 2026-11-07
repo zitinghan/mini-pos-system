@@ -1,5 +1,31 @@
 import { test, expect } from '@playwright/test';
 
+test('wantan soup replaces sauce without a surcharge and prints on the receipt', async ({ page }, info) => {
+  await page.goto('/');
+  const required = (await (await page.request.get('/api/auth/setup-status')).json()).setup_required;
+  await page.getByLabel('员工名称').fill('browser-owner');
+  await page.getByLabel(required ? '设置 6–12 位数字 PIN' : 'PIN 码').fill('928461');
+  if (required) await page.getByLabel('服务器设置令牌').fill('isolated-browser-test-setup-token');
+  await page.getByRole('button', { name: required ? '创建管理员并登录' : '登录', exact: true }).click();
+  const table = { 'android-360': 'T10', 'android-390': 'T11', 'android-412': 'T12' }[info.project.name]!;
+  await page.getByRole('button', { name: new RegExp(`^${table}`) }).click();
+  await page.getByRole('button', { name: /^云吞面 RM/ }).click();
+  await page.getByRole('button', { name: '汤', exact: true }).click();
+  await expect(page.getByRole('button', { name: '黑酱', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByRole('button', { name: '加入草稿 · RM 8.00', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: /^加面/ }).click();
+  await page.getByRole('button', { name: '加入草稿 · RM 10.00', exact: true }).click();
+  await expect(page.getByText('汤 · 不辣 · 加面', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '确认下单 / 送档口' }).click();
+  await page.getByRole('button', { name: new RegExp(`^${table}`) }).click();
+  await page.getByRole('button', { name: '查看账单 / 收款' }).click();
+  await page.getByRole('button', { name: '确认收款并清台' }).click();
+  const receipt = page.getByRole('article', { name: '客户收据' });
+  await expect(receipt).toContainText('汤 · 不辣 · 加面');
+  await expect(receipt).toContainText('RM 10.00');
+  await expect(receipt).not.toContainText('黑酱');
+});
+
 test('rice portions, priority sides and three separate stall tickets', async ({ page }, info) => {
   await page.goto('/');
   const required = (await (await page.request.get('/api/auth/setup-status')).json()).setup_required;
