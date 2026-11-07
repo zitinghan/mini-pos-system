@@ -108,3 +108,52 @@ test('mixed categories, temperatures, beer packages and analytics', async ({ pag
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await page.screenshot({ path: info.outputPath('v11-analytics.png'), fullPage: true });
 });
+
+test('RM1 promotion and sold-out stock synchronize between admin and staff phones', async ({ page, browser }, info) => {
+  await page.goto('/');
+  await page.getByLabel('员工名称').fill('browser-owner');
+  await page.getByLabel('PIN 码').fill('928461');
+  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '选择桌台' })).toBeVisible();
+  const token = await page.evaluate(() => sessionStorage.getItem('koko-token'));
+  const headers = { Authorization: `Bearer ${token}` };
+  const campaign = { starts_on: '2026-01-01', ends_on: '2099-12-31', unit_price: 100, enabled: true };
+  expect((await page.request.put('/api/menu/promotions/kopi-teh', { headers, data: campaign })).status()).toBe(200);
+  const staffName = `stock-staff-${info.project.name}`;
+  expect((await page.request.post('/api/users', { headers, data: { name: staffName, pin: '938471', role: 'STAFF' } })).status()).toBe(201);
+  const menu = await (await page.request.get('/api/menu', { headers })).json();
+  const coffee = menu.find((item: { sku: string }) => item.sku === 'KOPI_O');
+  const staffContext = await browser.newContext({ baseURL: 'http://127.0.0.1:5173', viewport: { width: info.project.use.viewport!.width, height: 850 }, isMobile: true, hasTouch: true });
+  try {
+    const staffPage = await staffContext.newPage();
+    await staffPage.goto('/');
+    await staffPage.getByLabel('员工名称').fill(staffName);
+    await staffPage.getByLabel('PIN 码').fill('938471');
+    await staffPage.getByRole('button', { name: '登录', exact: true }).click();
+    await expect(staffPage.getByRole('heading', { name: '选择桌台' })).toBeVisible();
+    const table = { 'android-360': 'T11', 'android-390': 'T12', 'android-412': 'T13' }[info.project.name]!;
+    await staffPage.getByRole('button', { name: new RegExp(table) }).click();
+    await staffPage.getByRole('button', { name: /饮料 Drinks/ }).click();
+    await staffPage.getByRole('button', { name: /^Kopi O / }).click();
+    await staffPage.getByRole('button', { name: '冰 ICED RM 1.00' }).click();
+    await staffPage.getByRole('button', { name: '增加数量' }).click();
+    await expect(staffPage.getByRole('button', { name: '加入草稿 · RM 2.00' })).toBeEnabled();
+    await page.getByRole('link', { name: /设置/ }).click();
+    await page.getByRole('group', { name: '供应分类' }).getByRole('button', { name: '饮料', exact: true }).click();
+    await page.getByRole('button', { name: 'Kopi O · 标记售罄' }).click();
+    await expect(page.getByRole('button', { name: 'Kopi O · 恢复供应' })).toBeVisible();
+    await expect(staffPage.getByRole('button', { name: /^Kopi O .*SOLD OUT/ })).toBeDisabled();
+    await expect(staffPage.getByRole('button', { name: 'SOLD OUT · 已售罄', exact: true })).toBeDisabled();
+    expect(await staffPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    await staffPage.screenshot({ path: info.outputPath('staff-sold-out.png'), fullPage: true });
+    await page.getByRole('button', { name: 'Kopi O · 恢复供应' }).click();
+    await expect(staffPage.getByRole('button', { name: /^Kopi O / })).toBeEnabled();
+    await expect(staffPage.getByRole('button', { name: '加入草稿 · RM 2.00' })).toBeEnabled();
+    await staffPage.getByRole('button', { name: '加入草稿 · RM 2.00' }).click();
+    await expect(staffPage.getByText('预计 RM 2.00')).toBeVisible();
+  } finally {
+    await page.request.patch(`/api/menu/items/${coffee.id}/availability`, { headers, data: { sold_out: false } });
+    await page.request.put('/api/menu/promotions/kopi-teh', { headers, data: { ...campaign, enabled: false } });
+    await staffContext.close();
+  }
+});

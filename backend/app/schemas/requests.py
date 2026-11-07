@@ -1,5 +1,5 @@
 from typing import Literal
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
@@ -53,3 +53,23 @@ class PrinterSettings(StrictModel):
 class OptionConfiguration(StrictModel):
     enabled: bool
     incompatible_with: list[int] = Field(default_factory=list, max_length=30)
+
+
+class AvailabilityUpdate(StrictModel):
+    sold_out: bool
+
+
+class PromotionUpdate(StrictModel):
+    starts_on: str
+    ends_on: str
+    unit_price: int = Field(gt=0, le=1000000)
+    enabled: bool = True
+
+    @model_validator(mode='after')
+    def valid_dates(self):
+        from datetime import date
+        start, end = date.fromisoformat(self.starts_on), date.fromisoformat(self.ends_on)
+        if start > end:
+            raise ValueError('Promotion end date must be on or after the start date')
+        self.starts_on, self.ends_on = start.isoformat(), end.isoformat()
+        return self

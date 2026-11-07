@@ -20,6 +20,16 @@ function startingPrice(item: MenuItem) {
   return variants.length ? Math.min(...variants) : item.base_price;
 }
 
+export function MenuItemButton({ item, selected, onSelect }: { item: MenuItem; selected: boolean; onSelect: (item: MenuItem) => void }) {
+  return <button className={`food-button ${item.sold_out ? 'sold-out' : ''} ${selected ? 'selected' : ''}`}
+    disabled={item.sold_out} onClick={() => onSelect(item)}>
+    <span>{item.name}</span><small>{money(startingPrice(item))} 起</small>
+    {item.sold_out ? <span className="sold-out-label">SOLD OUT · 已售罄</span>
+      : item.promotion && <span className="promotion-label">限时优惠 · 热 / 冷同价</span>}
+    {item.description && <small>{item.description}</small>}
+  </button>;
+}
+
 export function ItemPicker({ item, onAdd, busy }: PickerProps) {
   const [selected, setSelected] = useState<number[]>(
     item.groups.flatMap((group) => group.options.filter((option) => option.is_default && option.enabled !== false)
@@ -39,6 +49,8 @@ export function ItemPicker({ item, onAdd, busy }: PickerProps) {
   return (
     <section className="card stack">
       <h2>{item.name}</h2>
+      {item.sold_out && <p className="warning" role="status">SOLD OUT · 已售罄，请选择其他项目。</p>}
+      {item.promotion && <p className="promotion">限时 {money(item.promotion.unit_price)} · 至 {item.promotion.ends_on}（马来西亚时间）</p>}
       {item.description && <p className="muted">{item.description}</p>}
       {item.groups.map((group) => (
         <fieldset key={group.id}>
@@ -80,9 +92,9 @@ export function ItemPicker({ item, onAdd, busy }: PickerProps) {
       </div>
       {!!variant?.bottles && <p>{quantity} × {variant.name} · 共 {quantity * variant.bottles} 瓶</p>}
       <label>备注（可选）<input maxLength={240} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
-      <button type="button" className="primary" disabled={busy || !valid}
+      <button type="button" className="primary" disabled={busy || !valid || item.sold_out}
         onClick={() => notes.trim() ? onAdd(quantity, selected, notes.trim()) : onAdd(quantity, selected)}>
-        {busy ? '正在保存…' : `加入草稿 · ${money(price * quantity)}`}
+        {item.sold_out ? 'SOLD OUT · 已售罄' : busy ? '正在保存…' : `加入草稿 · ${money(price * quantity)}`}
       </button>
     </section>
   );
@@ -109,7 +121,7 @@ export default function Session() {
   const menu = useQuery({
     queryKey: ['menu'],
     queryFn: () => api<MenuItem[]>('/menu'),
-    refetchInterval: 30000,
+    refetchInterval: 4000,
   });
   const refresh = () => {
     void client.invalidateQueries({ queryKey: ['batches', id] });
@@ -117,10 +129,13 @@ export default function Session() {
   };
   const ownDraft = batches.data?.find((batch) => batch.status === 'DRAFT' && batch.user_id === user?.id);
   const drafts = ownDraft?.items.filter((item) => item.status === 'DRAFT') ?? [];
+  const unavailableDrafts = drafts.filter((item) => menu.data?.some((entry) => entry.id === item.menu_item_id && entry.sold_out));
+  const currentChosen = chosen ? menu.data?.find((item) => item.id === chosen.id) ?? chosen : null;
 
   const add = useMutation({
     mutationFn: async ({ quantity, ids, notes = '' }: { quantity: number; ids: number[]; notes?: string }) => {
       if (!chosen) throw new Error('请选择菜品');
+      if (currentChosen?.sold_out) throw new Error(`${currentChosen.name} 已售罄，请选择其他项目。`);
       const batch = ownDraft ?? await api<{ id: number }>('/order-batches', 'POST', {
         session_id: Number(id),
       });
@@ -129,8 +144,13 @@ export default function Session() {
       const scope = `add:${batch.id}:${JSON.stringify(payload)}`;
       await api(`/order-batches/${batch.id}/items`, 'POST', payload, requestKey(scope));
       clearKey(scope);
+      return chosen.id;
     },
-    onSuccess: () => { setChosen(null); setError(null); refresh(); },
+    onSuccess: (addedItemId) => {
+      setChosen((current) => current?.id === addedItemId ? null : current);
+      setError(null);
+      refresh();
+    },
     onError: setError,
   });
   const submit = useMutation({
@@ -214,14 +234,10 @@ export default function Session() {
         </div>
         <div className="food-grid">
           {menu.data?.filter((item) => (item.category_code ?? 'MAINS') === category).map((item) => (
-            <button className={`food-button ${chosen?.id === item.id ? 'selected' : ''}`}
-              key={item.id} onClick={() => setChosen(item)}>
-              <span>{item.name}</span><small>{money(startingPrice(item))} 起</small>
-              {item.description && <small>{item.description}</small>}
-            </button>
+            <MenuItemButton key={item.id} item={item} selected={chosen?.id === item.id} onSelect={setChosen} />
           ))}
         </div>
-        {chosen && <ItemPicker key={chosen.id} item={chosen} busy={add.isPending}
+        {currentChosen && <ItemPicker key={currentChosen.id} item={currentChosen} busy={add.isPending}
           onAdd={(quantity, ids, notes) => add.mutate({ quantity, ids, notes })} />}
       </>}
       {ownDraft && (
@@ -234,7 +250,8 @@ export default function Session() {
           ))}
           <strong>预计 {money(drafts.reduce((sum, item) => sum + item.line_total, 0))}</strong>
           <small>价格以确认下单时菜单为准。</small>
-          <button className="primary" disabled={!active || !drafts.length || submit.isPending || add.isPending}
+          {unavailableDrafts.length > 0 && <p className="warning" role="alert">{unavailableDrafts.map((item) => item.name).join('、')} 已售罄，请先移除或等待恢复供应。</p>}
+          <button className="primary" disabled={!active || !drafts.length || unavailableDrafts.length > 0 || submit.isPending || add.isPending}
             onClick={() => submit.mutate()}>
             {submit.isPending ? '正在确认…' : '确认下单 / 送厨房'}
           </button>

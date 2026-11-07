@@ -1,7 +1,7 @@
 ﻿import { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '../services/api';
-import type { MenuItem, Printer, User, Option } from '../services/types';
+import type { MenuItem, Printer, User, Option, Promotion, CategoryCode } from '../services/types';
 import { money, parseSen } from '../utils/format';
 import { ErrorBox, Loading } from '../components/Common';
 
@@ -28,29 +28,59 @@ function Customization({ option, peers }: { option: Option; peers: Option[] }) {
   </form>;
 }
 
+export function AvailabilityButton({ item, pending, onToggle }: { item: MenuItem; pending: boolean; onToggle: () => void }) {
+  return <button type="button" className={item.sold_out ? 'restore-stock' : 'quiet'} disabled={pending}
+    aria-label={`${item.name} · ${item.sold_out ? '恢复供应' : '标记售罄'}`} onClick={onToggle}>
+    {item.sold_out ? '恢复供应' : '标记售罄'}
+  </button>;
+}
+
 export default function Settings() {
   const client = useQueryClient();
   const [form, setForm] = useState<Printer | null>(null);
   const [name, setName] = useState('');
   const [pin, setPin] = useState('');
   const [role, setRole] = useState<'STAFF' | 'ADMIN'>('STAFF');
-  const menu = useQuery({ queryKey: ['menu'], queryFn: () => api<MenuItem[]>('/menu') });
+  const [stockCategory, setStockCategory] = useState<CategoryCode>('MAINS');
+  const menu = useQuery({ queryKey: ['menu'], queryFn: () => api<MenuItem[]>('/menu'), refetchInterval: 4000 });
+  const promotions = useQuery({ queryKey: ['menu-promotions'], queryFn: () => api<Promotion[]>('/menu/promotions'), refetchInterval: 15000 });
   const printer = useQuery({ queryKey: ['printer-config'], queryFn: () => api<Printer>('/printers/config') });
   const users = useQuery({ queryKey: ['users'], queryFn: () => api<User[]>('/users') });
   useEffect(() => { if (printer.data) setForm(printer.data); }, [printer.data]);
   const save = useMutation({ mutationFn: () => api('/printers/config', 'PUT', form), onSuccess: () => { void client.invalidateQueries({ queryKey: ['printer-config'] }); } });
   const test = useMutation({ mutationFn: () => api('/printers/test-print', 'POST') });
   const verify = useMutation({ mutationFn: (id: number) => api(`/menu/items/${id}/verify`, 'POST'), onSuccess: () => { void client.invalidateQueries({ queryKey: ['menu'] }); } });
+  const availability = useMutation({
+    mutationFn: ({ id, soldOut }: { id: number; soldOut: boolean }) => api(`/menu/items/${id}/availability`, 'PATCH', { sold_out: soldOut }),
+    onSuccess: () => { void client.invalidateQueries({ queryKey: ['menu'] }); },
+  });
   const create = useMutation({ mutationFn: () => api('/users', 'POST', { name, pin, role }), onSuccess: () => { setName(''); setPin(''); void client.invalidateQueries({ queryKey: ['users'] }); } });
   const change = <K extends keyof Printer>(key: K, value: Printer[K]) => setForm((previous) => previous ? { ...previous, [key]: value } : null);
   return <>
-    <h1>管理设置</h1><ErrorBox error={menu.error || printer.error || users.error || verify.error} />
+    <h1>管理设置</h1><ErrorBox error={menu.error || printer.error || users.error || verify.error || availability.error || promotions.error} />
+    <section className="card stack"><h2>售罄管理</h2><small>售罄会同步到其他员工手机，暂时禁止新增及提交该项目；已下单账单保留。</small>
+      <div className="category-tabs" role="group" aria-label="供应分类">
+        {([['MAINS', '主食'], ['SNACKS', '小吃'], ['DRINKS', '饮料'], ['BEER', '啤酒']] as const).map(([code, name]) =>
+          <button key={code} aria-pressed={stockCategory === code} onClick={() => setStockCategory(code)}>{name}</button>)}
+      </div>
+      {menu.data?.filter((item) => (item.category_code ?? 'MAINS') === stockCategory).map((item) => <div className="line stock-row" key={item.id}>
+        <div><strong>{item.name}</strong><small>{item.sold_out ? 'SOLD OUT · 已售罄' : '供应中'}</small></div>
+        <AvailabilityButton item={item} pending={availability.isPending} onToggle={() => availability.mutate({ id: item.id, soldOut: !item.sold_out })} />
+      </div>)}
+    </section>
+    {promotions.data?.map((promotion) => <section className="card stack" key={promotion.id}>
+      <h2>{promotion.name} · {money(promotion.unit_price)}</h2>
+      <p>{promotion.starts_on} 至 {promotion.ends_on}（含当天，马来西亚时间） · {promotion.is_active ? '进行中' : '未生效 / 已结束'}</p>
+      <p>{promotion.skus.map((sku) => menu.data?.find((item) => item.sku === sku)?.name ?? sku).join('、')} · 热 / 冷同价</p>
+      <small>常规价格保持不变，活动结束后自动恢复。白咖啡和三色茶不参与本次优惠。</small>
+    </section>)}
     <section className="card stack"><h2>菜单价格 (RM)</h2><small>仅影响新下单，历史账单保留原价。热 / 冰及啤酒包装均为独立定价。</small>
-      {menu.data?.map((item) => <details key={item.id}><summary>{item.name} · {item.description || money(item.base_price)}</summary>
+      {menu.data?.map((item) => <details key={item.id}><summary>{item.name} · {item.description || money(item.regular_base_price ?? item.base_price)}</summary>
+        {item.promotion && <p className="promotion">当前优惠 {money(item.promotion.unit_price)}，以下编辑的是到期后使用的常规价格。</p>}
         {item.verification_required && <div className="warning"><p>{item.verification_note}</p><button disabled={verify.isPending} onClick={() => verify.mutate(item.id)}>已核实供应方式及价格</button></div>}
         {item.complimentary ? <p>白开水免费 · RM 0.00</p> : <>
-          {!item.groups.some((group) => group.options.some((option) => option.unit_price != null)) && <PriceEditor id={item.id} name={item.name} price={item.base_price} />}
-          {item.groups.filter((group) => group.minimum > 0).flatMap((group) => group.options.map((option) => <PriceEditor key={option.id} id={option.id} name={`${group.name} · ${option.name}${option.unit_price == null ? '（加价）' : '（单价）'}`} price={option.unit_price ?? option.price} option />))}
+          {!item.groups.some((group) => group.options.some((option) => option.unit_price != null)) && <PriceEditor id={item.id} name={item.name} price={item.regular_base_price ?? item.base_price} />}
+          {item.groups.filter((group) => group.minimum > 0).flatMap((group) => group.options.map((option) => <PriceEditor key={option.id} id={option.id} name={`${group.name} · ${option.name}${option.unit_price == null ? '（加价）' : '（单价）'}`} price={option.regular_unit_price ?? option.unit_price ?? option.price} option />))}
         </>}
         {item.groups.filter((group) => group.minimum === 0).map((group) => <section key={group.id}><h2>{group.name}</h2>{group.options.map((option) => <Customization key={option.id} option={option} peers={group.options} />)}</section>)}
       </details>)}

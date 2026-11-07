@@ -61,12 +61,25 @@ class MenuItem(Record, Base):
     name: Mapped[str]
     base_price: Mapped[int]
     active: Mapped[bool] = mapped_column(default=True)
+    sold_out: Mapped[bool] = mapped_column(default=False)
     sku: Mapped[str | None] = mapped_column(unique=True)
     description: Mapped[str] = mapped_column(default='')
     complimentary: Mapped[bool] = mapped_column(default=False)
     verification_required: Mapped[bool] = mapped_column(default=False)
     verification_note: Mapped[str] = mapped_column(default='')
     __table_args__ = (CheckConstraint('base_price >= 0'),)
+
+
+class MenuPromotion(Record, Base):
+    __tablename__ = 'menu_promotions'
+    code: Mapped[str] = mapped_column(unique=True)
+    name: Mapped[str]
+    unit_price: Mapped[int]
+    starts_on: Mapped[str]
+    ends_on: Mapped[str]
+    skus: Mapped[list] = mapped_column(JSON)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    __table_args__ = (CheckConstraint('unit_price > 0'),)
 
 class ModifierGroup(Record, Base):
     __tablename__ = 'modifier_groups'

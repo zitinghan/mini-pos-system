@@ -8,9 +8,10 @@ from app.core import config
 from app.core.security import current_user, admin, hash_pin, verify_pin, token_hash
 from app.database.db import transaction
 from app.models.entities import (User, AuthSession, LoginAttempt, RestaurantTable, TableSession, MenuItem, ModifierOption,
-    OrderBatch, OrderItem, OrderItemModifier, MenuItemModifierGroup, ModifierGroup, Payment, PrintJob, PrinterConfiguration, AuditLog, now)
-from app.schemas.requests import Setup, Credentials, NewUser, NewBatch, NewItem, PriceUpdate, Pay, PrinterSettings, OptionConfiguration
+    OrderBatch, OrderItem, OrderItemModifier, MenuItemModifierGroup, ModifierGroup, MenuPromotion, Payment, PrintJob, PrinterConfiguration, AuditLog, now)
+from app.schemas.requests import Setup, Credentials, NewUser, NewBatch, NewItem, PriceUpdate, Pay, PrinterSettings, OptionConfiguration, AvailabilityUpdate, PromotionUpdate
 from app.services import orders
+from app.services import promotions
 
 router = APIRouter(prefix='/api')
 
@@ -157,6 +158,37 @@ def open_table(table_id: int, user=Depends(current_user)):
 def menu(user=Depends(current_user)):
     with transaction() as db:
         return orders.menu(db)
+
+
+@router.patch('/menu/items/{item_id}/availability')
+def update_availability(item_id: int, data: AvailabilityUpdate, user=Depends(admin)):
+    with transaction() as db:
+        item = orders.require(db, MenuItem, item_id)
+        previous = item.sold_out
+        item.sold_out = data.sold_out
+        db.add(AuditLog(user_id=user['id'], action='MENU_AVAILABILITY', details={
+            'item_id': item.id, 'name': item.name, 'old_sold_out': previous, 'sold_out': item.sold_out}))
+        return {'id': item.id, 'sold_out': item.sold_out}
+
+
+@router.get('/menu/promotions')
+def list_promotions(user=Depends(admin)):
+    with transaction() as db:
+        return [promotions.data(promotion) for promotion in db.scalars(select(MenuPromotion).order_by(MenuPromotion.id.desc()))]
+
+
+@router.put('/menu/promotions/kopi-teh')
+def update_kopi_teh_promotion(data: PromotionUpdate, user=Depends(admin)):
+    with transaction() as db:
+        promotion = db.scalar(select(MenuPromotion).where(MenuPromotion.code == promotions.KOPI_TEH_CODE))
+        if promotion is None:
+            promotion = MenuPromotion(code=promotions.KOPI_TEH_CODE, name='Kopi / Teh 限时优惠', skus=promotions.KOPI_TEH_SKUS)
+            db.add(promotion)
+        promotion.starts_on, promotion.ends_on = data.starts_on, data.ends_on
+        promotion.unit_price, promotion.enabled = data.unit_price, data.enabled
+        db.flush()
+        db.add(AuditLog(user_id=user['id'], action='MENU_PROMOTION', details={'code': promotion.code, **data.model_dump()}))
+        return promotions.data(promotion)
 
 
 @router.patch('/menu/items/{item_id}')

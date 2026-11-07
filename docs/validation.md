@@ -1,5 +1,12 @@
 # Validation Record
 
+## Scheduled RM1 drinks and sold-out availability — 2026-11-07
+
+Complete backend suite: **145 passed** (one existing dependency deprecation warning). Frontend: **17 passed**, TypeScript and production build passed. Browser acceptance: **9 passed** at 360/390/412, including independent admin/staff sessions, a cached open picker becoming disabled, and restoration. Fixed a real quick-selection race in the add-item completion callback and added a regression test.
+
+Migration `0003_stock_promotions` was rehearsed twice on a backup of the live database. Existing history and regular prices compared unchanged. After a fresh backup, the live app was migrated, the six specified Kopi/Teh products were configured at 100 sen through 2026-12-01 inclusive in Malaysia time, and the app was restarted. Existing histories were preserved and no test orders were added to live data. White coffee and three-layer tea are excluded; ordinary prices remain stored for automatic expiry. See [操作说明及执行结果](stock-promotions.md).
+
+
 ## v1.1 Windows validation — 2026-11-07
 
 - Python 3.12.10; Node 22.22.2 for complete browser acceptance; frontend build and unit tests also passed with installed Node 24.21.0.

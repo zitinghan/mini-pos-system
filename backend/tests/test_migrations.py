@@ -13,7 +13,7 @@ def test_migrate_seed_and_restart_without_data_loss(tmp_path):
     with sqlite3.connect(path) as db:
         assert db.execute('SELECT COUNT(*) FROM restaurant_tables').fetchone()[0] == 15
         assert db.execute('SELECT COUNT(*) FROM menu_items').fetchone()[0] == 29
-        assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0] == '0002_v11'
+        assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0] == '0003_stock_promotions'
         assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
 
 

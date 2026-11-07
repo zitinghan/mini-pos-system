@@ -3,6 +3,7 @@ import json
 from fastapi import HTTPException
 from sqlalchemy import select
 from app.services.pricing import SelectionGroup, PriceValidationError, calculate_price
+from app.services import promotions
 from app.models.entities import (MenuItem, MenuCategory, PrinterConfiguration, ModifierGroup, ModifierOption, MenuItemModifierGroup,
     TableSession, RestaurantTable, OrderBatch, OrderItem, OrderItemModifier, PrintJob, Payment, AuditLog, now)
 
@@ -23,25 +24,33 @@ def active_session(db, identity):
 
 def menu(db):
     result = []
+    campaigns = promotions.active_promotions(db)
     for item in db.scalars(select(MenuItem).where(MenuItem.active == True).order_by(MenuItem.id)):
+        promotion = promotions.for_sku(campaigns, item.sku)
         category = db.get(MenuCategory, item.category_id)
         groups = list(db.scalars(select(ModifierGroup).join(MenuItemModifierGroup, MenuItemModifierGroup.group_id == ModifierGroup.id).where(MenuItemModifierGroup.item_id == item.id).order_by(ModifierGroup.display_order)))
-        result.append({'id': item.id, 'name': item.name, 'category_id': item.category_id, 'base_price': item.base_price,
+        result.append({'id': item.id, 'name': item.name, 'category_id': item.category_id,
+            'base_price': promotion.unit_price if promotion else item.base_price, 'regular_base_price': item.base_price,
+            'sold_out': item.sold_out, 'promotion': promotions.data(promotion) if promotion else None,
             'sku': item.sku, 'category_code': category.code or 'MAINS', 'category_name': category.name,
             'printer_group': category.printer_group, 'description': item.description,
             'complimentary': item.complimentary, 'verification_required': item.verification_required,
             'verification_note': item.verification_note,
             'groups': [{'id': g.id, 'name': g.name, 'minimum': g.minimum, 'maximum': g.maximum, 'required': g.minimum > 0,
-                'options': [{'id': o.id, 'name': o.name, 'price': o.price, 'unit_price': o.unit_price, 'bottles': o.bottles,
+                'options': [{'id': o.id, 'name': o.name, 'price': o.price,
+                             'unit_price': promotion.unit_price if promotion and o.unit_price is not None else o.unit_price,
+                             'regular_unit_price': o.unit_price, 'bottles': o.bottles,
                              'enabled': o.enabled, 'incompatible_with': o.incompatible_with, 'is_default': o.is_default}
                             for o in db.scalars(select(ModifierOption).where(ModifierOption.group_id == g.id).order_by(ModifierOption.display_order))]} for g in groups]})
     return result
 
 
-def price_item(db, item_id, quantity, option_ids):
+def price_item(db, item_id, quantity, option_ids, *, campaigns=None):
     item = require(db, MenuItem, item_id)
     if not item.active:
         raise HTTPException(422, 'Item is unavailable')
+    if item.sold_out:
+        raise HTTPException(409, f'{item.name} 已售罄，请移除或改选其他项目。')
     groups = list(db.scalars(
         select(ModifierGroup)
         .join(MenuItemModifierGroup, MenuItemModifierGroup.group_id == ModifierGroup.id)
@@ -71,6 +80,9 @@ def price_item(db, item_id, quantity, option_ids):
     if len(variants) > 1:
         raise HTTPException(422, 'Choose only one price variant')
     unit = (variants[0].unit_price + sum(option.price for option in selected)) if variants else quote.unit_price
+    promotion = promotions.for_sku(promotions.active_promotions(db) if campaigns is None else campaigns, item.sku)
+    if promotion:
+        unit = promotion.unit_price
     if unit < 0 or (unit == 0 and not item.complimentary):
         raise HTTPException(422, 'Only complimentary items may have a zero price')
     return item, selected, unit
@@ -88,6 +100,7 @@ def snapshot_item(db, item, source, options):
 
 def item_data(db, item):
     return {'id': item.id, 'name': item.name, 'quantity': item.quantity, 'base_price': item.base_price,
+        'menu_item_id': item.menu_item_id,
         'unit_price': item.unit_price, 'line_total': item.line_total, 'status': item.status,
         'sku': item.sku, 'category_code': item.category_code, 'printer_group': item.printer_group,
         'description': item.description, 'variant_name': item.variant_name, 'bottles_per_unit': item.bottles_per_unit,
@@ -139,9 +152,10 @@ def submit(db, identity, key, user):
     if not items:
         raise HTTPException(422, 'Cannot submit an empty order')
     # Revalidate current menu and snapshot final authoritative prices at submission.
+    campaigns = promotions.active_promotions(db)
     for item in items:
         modifiers = list(db.scalars(select(OrderItemModifier).where(OrderItemModifier.item_id == item.id)))
-        source, options, unit = price_item(db, item.menu_item_id, item.quantity, [m.option_id for m in modifiers])
+        source, options, unit = price_item(db, item.menu_item_id, item.quantity, [m.option_id for m in modifiers], campaigns=campaigns)
         item.name, item.base_price, item.unit_price = source.name, source.base_price, unit
         item.line_total, item.status = unit * item.quantity, 'SUBMITTED'
         snapshot_item(db, item, source, options)

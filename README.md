@@ -16,6 +16,12 @@ Staff select a table, choose food and options, then submit an order to the kitch
 - **Mobile interface:** Simplified Chinese labels, large touch controls, responsive layouts, and PWA assets.
 - **Recovery:** persistent SQLite storage, database migrations, and SQLite-safe backup/restore scripts.
 
+## Kopi / Teh promotion and sold-out controls
+
+Kopi O, Kopi, Kopi C, Teh O, Teh and Teh C cost **RM1 per cup, Hot or Iced, through 1 December 2026 inclusive** (Asia/Kuala_Lumpur). White coffee and three-layer tea are excluded. A scheduled database promotion leaves regular prices intact and restores them automatically after the period; submitted prices remain historical snapshots.
+
+Administrators can use **Settings → 售罄管理** to mark products **SOLD OUT** and restore supply. Other devices refresh availability every four seconds; the backend also rejects sold-out additions and submissions from stale screens. See [操作说明及规则](docs/stock-promotions.md).
+
 ## Version 1.1 and validation
 
 Version 1.1 adds four touch-friendly categories and 29 products: three mains, seven snacks, 15 paid drinks, complimentary plain water, and three beers. Hot/Iced and beer packages have explicit database prices. Per-dish free customizations, dining duration, category sales analytics, and kitchen/beverage routing extend the existing workflows. See the [complete menu, migration, changed files and release notes](docs/v1.1.md).
@@ -24,10 +30,9 @@ Validated on Windows on **2026-11-07**:
 
 | Check | Result |
 | --- | --- |
-| Full backend regression suite | **115 passed**, one dependency deprecation warning |
-| Additional cross-version draft-retry regression | **1 passed** |
-| Frontend unit tests | **11 passed** |
-| Browser acceptance at 360 / 390 / 412 pixels | **6 passed** |
+| Full backend regression suite | **145 passed**, one dependency deprecation warning |
+| Frontend unit tests | **17 passed** |
+| Browser acceptance at 360 / 390 / 412 pixels | **9 passed** |
 | SQLite, credentials and backup/recovery invariants | **8 passed** |
 | TypeScript / production frontend build | Passed |
 | Populated v1 migration and repeated menu seeding | Passed |
