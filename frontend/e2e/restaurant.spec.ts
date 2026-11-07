@@ -1,5 +1,121 @@
 import { test, expect } from '@playwright/test';
 
+test('partial paid amount can be edited and checkout collects only the offered balance',async({page},info)=>{
+  await page.goto('/');
+  const required=(await (await page.request.get('/api/auth/setup-status')).json()).setup_required;
+  await page.getByLabel('员工名称').fill('browser-owner');
+  await page.getByLabel(required?'设置 6–12 位数字 PIN':'PIN 码').fill('928461');
+  if(required)await page.getByLabel('服务器设置令牌').fill('isolated-browser-test-setup-token');
+  await page.getByRole('button',{name:required?'创建管理员并登录':'登录',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'选择桌台',exact:true})).toBeVisible();
+  const token=await page.evaluate(()=>sessionStorage.getItem('koko-token'));
+  const headers={Authorization:`Bearer ${token}`};
+  const before=await (await page.request.get('/api/reports/daily-sales',{headers})).json();
+  await page.getByRole('button',{name:/^T20/}).click();
+  await page.evaluate(()=>window.scrollTo(0,document.body.scrollHeight));
+  await page.getByRole('button',{name:/饮料.*Drinks/}).click();
+  await expect(page.getByRole('button',{name:/^Milo RM/})).toBeVisible();
+  await expect.poll(async()=>page.getByRole('region',{name:'餐点选择'}).evaluate(element=>{
+    const tabs=document.querySelector('.category-tabs')!.getBoundingClientRect();
+    const items=element.getBoundingClientRect();
+    return items.top >= tabs.bottom-4 && items.top < window.innerHeight-100;
+  })).toBe(true);
+  await page.getByRole('button',{name:/主食.*Mains/}).click();
+  await page.getByRole('button',{name:/^云吞面 RM/}).click();
+  await page.getByRole('button',{name:'加入草稿 · RM 8.00'}).click();
+  const draftLine=page.locator('.line').filter({hasText:'1 × 云吞面'}).first();
+  const editBounds=await draftLine.getByRole('button',{name:/^修改/}).boundingBox();
+  const removeBounds=await draftLine.getByRole('button',{name:/^移除/}).boundingBox();
+  expect(Math.abs(editBounds!.y-removeBounds!.y)).toBeLessThan(2);
+  expect(removeBounds!.x).toBeGreaterThan(editBounds!.x);
+  await page.getByLabel('本轮已付款（仅手动标记）').check();
+  await expect(page.getByLabel('本轮已付金额 (RM)')).toHaveValue('8.00');
+  await page.getByLabel('本轮已付金额 (RM)').fill('3.00');
+  await page.getByRole('button',{name:'确认下单 / 送档口'}).click();
+  await page.getByRole('button',{name:/^T20/}).click();
+  await page.getByRole('button',{name:'查看账单 / 收款'}).click();
+  await expect(page.getByText('已付金额',{exact:true}).locator('..')).toContainText('RM 3.00');
+  await expect(page.getByText('剩余应收',{exact:true}).locator('..')).toContainText('RM 5.00');
+  await page.getByRole('button',{name:'返回继续加单'}).click();
+  await page.getByRole('button',{name:'修改本轮备注 / 付款标记'}).click();
+  const dialog=page.getByRole('dialog',{name:'修改整单备注'});
+  await dialog.getByLabel('本轮已付金额 (RM)').fill('6.00');
+  await dialog.getByRole('button',{name:'保存备注 / 标记'}).click();
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole('button',{name:'查看账单 / 收款'}).click();
+  await page.getByLabel('优惠后总价 (RM)').fill('7.00');
+  await expect(page.getByText('剩余应收',{exact:true}).locator('..')).toContainText('RM 1.00');
+  await page.getByRole('button',{name:'现金',exact:true}).click();
+  await page.getByLabel('收到现金 (RM)').fill('2.00');
+  await expect(page.getByText('应找零',{exact:true}).locator('..')).toContainText('RM 1.00');
+  await page.screenshot({path:info.outputPath('partial-paid-checkout.png'),fullPage:true});
+  await page.getByRole('button',{name:'确认收款并清台'}).click();
+  const paper=page.getByRole('article',{name:'客户收据'});
+  await expect(paper.getByText('此前已付').locator('..')).toContainText('RM 6.00');
+  await expect(paper.getByText('本次收款').locator('..')).toContainText('RM 1.00');
+  await expect(paper.getByText('剩余应收').locator('..')).toContainText('RM 0.00');
+  const after=await (await page.request.get('/api/reports/daily-sales',{headers})).json();
+  expect(after.total-before.total).toBe(700);
+  expect(after.methods.QR-before.methods.QR).toBe(600);
+  expect(after.methods.CASH-before.methods.CASH).toBe(100);
+});
+
+test('sales history defaults to the server noon business day and can return from a historical day',async({page},info)=>{
+  await page.goto('/');
+  const required=(await (await page.request.get('/api/auth/setup-status')).json()).setup_required;
+  await page.getByLabel('员工名称').fill('browser-owner');
+  await page.getByLabel(required?'设置 6–12 位数字 PIN':'PIN 码').fill('928461');
+  if(required)await page.getByLabel('服务器设置令牌').fill('isolated-browser-test-setup-token');
+  await page.getByRole('button',{name:required?'创建管理员并登录':'登录',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'选择桌台',exact:true})).toBeVisible();
+  const token=await page.evaluate(()=>sessionStorage.getItem('koko-token'));
+  const report=await (await page.request.get('/api/reports/daily-sales',{headers:{Authorization:`Bearer ${token}`}})).json();
+  expect(report.business_day_cutoff).toBe('12:00');
+  await page.getByRole('link',{name:/营业记录/}).click();
+  await expect(page.getByLabel('营业日期')).toHaveValue(report.date);
+  await expect(page.getByText(/中午 12:00/)).toBeVisible();
+  await page.getByLabel('营业日期').fill('2000-01-01');
+  await expect(page.getByText('当天暂无交易。')).toBeVisible();
+  await page.getByRole('button',{name:'当前营业日',exact:true}).click();
+  await expect(page.getByLabel('营业日期')).toHaveValue(report.date);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+  await page.screenshot({path:info.outputPath('noon-business-day.png'),fullPage:true});
+});
+
+test('draft items show a pending badge on table cards until removed or submitted',async({page},info)=>{
+  await page.goto('/');
+  const required=(await (await page.request.get('/api/auth/setup-status')).json()).setup_required;
+  await page.getByLabel('员工名称').fill('browser-owner');
+  await page.getByLabel(required?'设置 6–12 位数字 PIN':'PIN 码').fill('928461');
+  if(required)await page.getByLabel('服务器设置令牌').fill('isolated-browser-test-setup-token');
+  await page.getByRole('button',{name:required?'创建管理员并登录':'登录',exact:true}).click();
+  await page.getByRole('button',{name:/^T20/}).click();
+  await page.getByRole('button',{name:/^云吞面 RM/}).click();
+  await page.getByRole('button',{name:'加入草稿 · RM 8.00'}).click();
+  await page.getByRole('link',{name:'← 返回桌台',exact:true}).click();
+  const card=page.locator('.table-card').filter({has:page.locator('.table-name',{hasText:'T20'})});
+  await expect(card.getByText('下单中',{exact:true})).toBeVisible();
+  await expect(card.getByRole('button',{name:/^T20/})).toHaveClass(/AVAILABLE/);
+  await page.screenshot({path:info.outputPath('table-ordering-badge.png'),fullPage:true});
+  await page.reload();
+  await expect(card.getByText('下单中',{exact:true})).toBeVisible();
+  await card.getByRole('button',{name:/^T20/}).click();
+  await page.getByRole('button',{name:'移除 1 × 云吞面',exact:true}).click();
+  await expect(page.getByRole('button',{name:'移除 1 × 云吞面',exact:true})).toHaveCount(0);
+  await page.getByRole('link',{name:'← 返回桌台',exact:true}).click();
+  await expect(card.getByText('下单中',{exact:true})).toHaveCount(0);
+  await card.getByRole('button',{name:/^T20/}).click();
+  await page.getByRole('button',{name:/^云吞面 RM/}).click();
+  await page.getByRole('button',{name:'加入草稿 · RM 8.00'}).click();
+  await page.getByRole('button',{name:'确认下单 / 送档口'}).click();
+  await expect(card.getByText('下单中',{exact:true})).toHaveCount(0);
+  await expect(card.getByRole('button',{name:/^T20/})).toHaveClass(/OCCUPIED/);
+  await card.getByRole('button',{name:/^T20/}).click();
+  await page.getByRole('button',{name:'查看账单 / 收款'}).click();
+  await page.getByRole('button',{name:'确认收款并清台'}).click();
+  await expect(page.getByRole('article',{name:'客户收据'})).toBeVisible();
+});
+
 test('wantan less-spicy choice is exclusive free and appears on the receipt',async({page})=>{
   await page.goto('/');
   const required=(await (await page.request.get('/api/auth/setup-status')).json()).setup_required;
@@ -73,9 +189,9 @@ test('paid-first methods can be selected and edited after ordering without recor
   expect(current.find((job:{order_type:string})=>job.order_type==='NEW').prepaid_method).toBe('CASH');
   await page.screenshot({path:info.outputPath('editable-paid-method.png'),fullPage:true});
   await page.getByRole('button',{name:'查看账单 / 收款'}).click();
-  await expect(page.getByText(/已付款标记：其他/)).toBeVisible();
-  await page.getByRole('button',{name:'其他',exact:true}).click();
-  await page.getByRole('button',{name:'确认收款并清台'}).click();
+  await expect(page.getByText(/已付款 RM 8.00 · 其他/)).toBeVisible();
+  await expect(page.getByRole('button',{name:'其他',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'确认已付款并清台'}).click();
   await expect(page.getByRole('article',{name:'客户收据'})).toContainText('其他');
 });
 
@@ -132,6 +248,15 @@ test('restore a cancelled takeaway table and keep its green manual paid note',as
   await expect(card.getByText('已付款',{exact:true})).toHaveCSS('color','rgb(33, 113, 61)');
   await page.screenshot({path:info.outputPath('takeaway-paid-table.png'),fullPage:true});
   await card.getByRole('button',{name:new RegExp(`^${table}`)}).click();
+  const cashierToken=await page.evaluate(()=>sessionStorage.getItem('koko-token'));
+  const helperName=`restore-draft-${info.project.name}`;
+  expect((await page.request.post('/api/users',{headers:{Authorization:`Bearer ${cashierToken}`},
+    data:{name:helperName,pin:'678912',role:'STAFF'}})).ok()).toBe(true);
+  const helper=await (await page.request.post('/api/auth/login',{data:{name:helperName,pin:'678912'}})).json();
+  expect((await page.request.post('/api/order-batches',{headers:{Authorization:`Bearer ${helper.token}`},
+    data:{session_id:Number(sessionId)}})).ok()).toBe(true);
+  await page.reload();
+  await expect(page.getByRole('heading',{name:/其他员工草稿/})).toBeVisible();
   await page.getByRole('button',{name:'取消整桌',exact:true}).click();
   await page.getByRole('button',{name:'确认取消整桌',exact:true}).click();
   await page.getByRole('button',{name:'恢复误关桌台',exact:true}).click();
@@ -142,7 +267,9 @@ test('restore a cancelled takeaway table and keep its green manual paid note',as
   expect(page.url().split('/').pop()).toBe(sessionId);
   await expect(page.getByText('1 × 云吞面',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'查看账单 / 收款'}).click();
-  await page.getByRole('button',{name:'确认收款并清台'}).click();
+  await expect(page.getByRole('heading',{name:`${table} · 收款`,exact:true})).toBeVisible();
+  await page.getByRole('checkbox',{name:/丢弃本桌全部草稿/}).check();
+  await page.getByRole('button',{name:'确认已付款并清台'}).click();
   await expect(page.getByRole('article',{name:'客户收据'})).toContainText('RM 8.00');
 });
 
@@ -903,9 +1030,9 @@ test('canned beverage brand choice is mutually exclusive and has no surcharge', 
   await page.getByRole('button', { name: 'Sprite', exact: true }).click();
   await page.getByRole('button', { name: 'Coke', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Sprite', exact: true })).toHaveAttribute('aria-pressed', 'false');
-  await page.getByRole('button', { name: /冰 ICED/ }).click();
-  await page.getByRole('button', { name: '加入草稿 · RM 3.30' }).click();
-  await expect(page.getByText('冰 ICED · Coke', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: /热 HOT|冰 ICED/ })).toHaveCount(0);
+  await page.getByRole('button', { name: '加入草稿 · RM 3.00' }).click();
+  await expect(page.getByText('Coke', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '确认下单 / 送档口' }).click();
   await page.getByRole('button', { name: /^T18/ }).click();
   await page.getByRole('button', { name: '查看账单 / 收款' }).click();

@@ -21,7 +21,7 @@ def test_paid_first_method_is_snapshotted_printed_editable_and_not_a_payment(cli
     original=client.get(f'/api/table-sessions/{session}/orders',headers=headers).json()[0]
     assert original['prepaid_method']==method and original['prepaid_label']
     bill=client.get(f'/api/table-sessions/{session}/bill',headers=headers).json()
-    assert bill['prepaid_rounds']==[{'batch_id':batch,'method':method}]
+    assert bill['prepaid_rounds']==[{'batch_id':batch,'method':method,'amount':800,'amount_estimated':False,'info_revision':1}]
     with transaction() as db:
         job=db.scalar(select(PrintJob)); old_ticket=deepcopy(job.ticket)
         assert old_ticket['prepaid_method']==method

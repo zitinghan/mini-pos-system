@@ -11,7 +11,7 @@ DRINKS = [('KOPI_O', 'Kopi O', 230, 260), ('KOPI', 'Kopi', 250, 280), ('KOPI_C',
           ('TEH_C', 'Teh C', 260, 290), ('MILO', 'Milo', 300, 330), ('MILO_MILK', 'Milo 奶', 330, 360),
           ('THREE_LAYER_TEA', '三色茶', 330, 360), ('MINERAL_WATER', '矿泉水', 180, 210),
           ('CORN', '玉米水', 180, 210), ('HERBAL_TEA', '凉茶', 180, 210), ('SOY', '豆奶', 200, 230),
-          ('CANNED', '汽水 / 罐装', 300, 330)]
+          ('CANNED', '汽水 / 罐装', 300, 300)]
 SNACKS = [('FRIED_WANTAN', '炸云吞', '10粒', 700), ('PORK_BALLS', '炸猪肉圆', '10粒', 700),
           ('FISH_BALLS', '炸鱼圆', '10粒', 700), ('SPRING_ROLLS', '炸春卷', '3条', 700),
           ('FRIES', '炸薯条', '1盘', 700), ('ANCHOVIES', '炸江鱼仔', '1盘', 700),
@@ -83,7 +83,8 @@ def seed():
         for sku, name, portion, price in SNACKS:
             install(sku, name, 'SNACKS', price, [], description=portion)
         for sku, name, hot, iced in DRINKS:
-            install(sku, name, 'DRINKS', hot, [('温度', 1, 1, [('热 HOT', 0, hot, 0), ('冰 ICED', 0, iced, 0)])], verify=sku in ('MINERAL_WATER', 'CANNED'))
+            groups = [] if sku == 'CANNED' else [('温度', 1, 1, [('热 HOT', 0, hot, 0), ('冰 ICED', 0, iced, 0)])]
+            install(sku, name, 'DRINKS', hot, groups, verify=sku == 'MINERAL_WATER')
         install('PLAIN_WATER', '白开水', 'DRINKS', 0, [('温度', 1, 1, [('冷', 0, 0, 0), ('热', 0, 0, 0)])], complimentary=True)
         for sku, name, single, triple in BEERS:
             install(sku, name, 'BEER', single, [('包装', 1, 1, [('单瓶', 0, single, 1), ('3瓶', 0, triple, 3)])])

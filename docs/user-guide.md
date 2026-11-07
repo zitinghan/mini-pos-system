@@ -19,7 +19,7 @@ After more than 45 minutes from the first submitted order, the table's time beco
 
 For a customer who cancels after waiting, use 取消此项 beside the food, or 取消整桌 to cancel all remaining unpaid food/drafts and release the table. Select 等候太久 and confirm. The appropriate stalls get cancellation notices; original records remain available. Edit 整桌备注 at any time before payment, or use 修改本轮备注 / 付款标记 for a specific round. 本轮已付款（仅手动标记） is only a label and does not record revenue or release the table. See [table controls and new menu choices](table-controls.md).
 
-When 本轮已付款 is checked, 本轮付款方式 offers QR, 现金 Cash and 其他 Other (new rounds default to QR). After ordering, open that table's 修改本轮备注 / 付款标记 to change the flag or method. Clearing the flag clears its method; later ordering rounds do not inherit either. Saved changes notify relevant stalls without adding food, and the selected method appears on that round, its tickets and cashier/history hints. Older labels with no recorded method stay 未记录 until staff chooses one. These are manual hints; select the actual payment method when completing cashier checkout.
+When 本轮已付款 is checked, choose 本轮付款方式 (QR by default, Cash or Other) and 本轮已付金额 (RM). The amount defaults to that round's total; enter a smaller amount for partial payment. After ordering, use 修改本轮备注 / 付款标记 to correct the amount or method. Changes to food or later orders do not change money already collected. Clearing the flag clears its amount/method; later rounds start without either. This does not clear the table or create a final sales record. Older labels have no saved amount: checkout explicitly marks their current round total as an estimate; verify and save the actual amount before clearing.
 
 整桌备注（所有轮次） is at the bottom of the ordering page, after the bill and any other staff drafts. 小吃 also includes 云吞汤 (10粒, RM8); quantity/takeaway are available and it routes to the noodle stall.
 
@@ -29,13 +29,21 @@ When 本轮已付款 is checked, 本轮付款方式 offers QR, 现金 Cash and �
 
 Every item has 堂食 / 打包 at the top of its options; choose 打包 for takeaway. Prepared drinks also offer Kosong（不加糖）or Siu Dai（少甜）, with optional Kao（加浓）. Iced drinks offer 少冰 / 去冰; switching to hot clears the ice adjustment. These choices do not add a fee and appear on the appropriate stall ticket and cashier receipt. Bottled/canned drinks, plain water and beer keep only their relevant temperature/package and takeaway choices. See [takeaway and drink options](takeaway-and-drinks.md).
 
+汽水 / 罐装统一 **RM3.00**，没有热／冷选择。可选 Sprite、Coke、Fanta、100 PLUS、菊花茶、7UP、Passion Fruit，保留数量、打包及备注。旧订单原有的 RM3.30 冰饮价格和说明保留，新订单按 RM3.00 计价。
+
 Order/bill lines and new thermal receipts omit the free neutral labels 不加蛋、普通、堂食. The choices stay selected in the editor and stored in history; prices are unchanged. Actual additions and preparation instructions (加蛋、加面、大份、打包、酱汁、辣度、汤/干、冷热 and drink adjustments) remain visible. Correction tickets explicitly show a neutral choice when it reverses an earlier instruction, such as 加蛋→不加蛋 or 打包→堂食. Old rendered preview images are retained as the original print record.
 
 For something outside the menu, use ＋ 自定义餐点 / 价格 below the item list. Enter name, unit price in RM, quantity, category and preparation stall; takeaway and item remarks are available. It joins the current draft and is sent only when you confirm the order. Custom dishes are not added to the fixed menu. Before payment, use 修改 to change their name/price/quantity/notes. Submitted category/stall stay fixed; cancel and re-add to change the destination. Custom beer also asks for bottles per unit/package.
 
 ## Cashier checkout
 
-All submitted items marked 打包 change the table card's 用餐中 label to 等待打包. Adding dine-in food changes it back; cancelled items and unsent drafts do not determine this label. A green 已付款 note means every active ordering round has the manual paid-first label. If only some rounds are marked, the card says 部分已付款. These labels do not record a cashier payment or clear the table.
+桌台卡片显示黄色「下单中」时，表示任一员工已有尚未确认的草稿餐点；其他手机会在下一次刷新同步看到。空草稿不显示。确认下单、移除全部草稿餐点或丢弃草稿后标记消失。标记不会提早将空桌改成用餐中，桌台总额仍只包含已确认餐点。
+
+营业记录按马来西亚时间 **中午 12:00** 划分营业日。例如 11 月 7 日中午 12:00 至 11 月 8 日上午 11:59:59 的销售都归在「11 月 7 日营业日」，晚上 18:00 到隔天凌晨 04:00 的营业不会在午夜拆开。营业记录默认日期由服务器决定，已选择的历史营业日期保留；收据保留实际收款日期和时间。系统也保留非营业时段的收款，不会因为营业时间而丢失交易。
+
+All submitted items marked 打包 change the table card's 用餐中 label to 等待打包. Adding dine-in food changes it back; cancelled items and unsent drafts do not determine this label. Green 已付款 means the recorded paid amounts cover the current bill; otherwise it says 部分已付款. These labels do not clear the table.
+
+The final bill shows 应收总额, 已付金额 and 剩余应收. Collect only the remainder, choosing QR/Cash/Other for that new collection. Cash input means cash received now, excluding earlier payments. When fully paid, payment selection disappears: tap 确认已付款并清台 without collecting again. The saved receipt shows earlier payment, new collection and zero remaining; daily reports allocate the full sale across its actual payment methods exactly once on completion. If an offer or cancellation makes the amount already paid exceed the final bill, handle the refund outside the POS and correct the paid amount before clearing; no automatic bank refund is performed.
 
 1. Open the table and tap 查看账单 / 收款.
 2. Verify every submitted item and 应收总额. For an offer, enter 优惠后总价 (RM) directly (RM0 up to the original total, at most two decimal places). An optional 优惠备注 explains the offer; 恢复原价 removes it. If another device changes the bill total, the input returns to the current original total for review.

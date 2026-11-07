@@ -70,7 +70,7 @@ def test_all_snacks_and_kitchen_portions(client, headers, sku, name, portion, pr
         assert portion in '\n'.join(line for line, _ in ticket_lines(ticket))
 
 
-@pytest.mark.parametrize('sku,name,hot,iced', DRINKS)
+@pytest.mark.parametrize('sku,name,hot,iced', [row for row in DRINKS if row[0] != 'CANNED'])
 def test_every_drink_explicit_hot_and_iced_prices(client, headers, sku, name, hot, iced):
     food = catalog(client, headers)[sku]
     batch = draft(client, headers, open_session(client, headers))
@@ -276,7 +276,7 @@ def test_daily_duration_average_excludes_unpaid_and_invalid(client, headers):
             db.add(session); db.flush()
             if paid:
                 db.add(Payment(session_id=session.id, user_id=1, idempotency_key=str(uuid4()), request_hash='test', method='QR', total=800, received=800, change=0, created_at=paid))
-    report = client.get('/api/reports/daily-sales?day=2026-11-07', headers=headers).json()
+    report = client.get('/api/reports/daily-sales?day=2026-11-06', headers=headers).json()
     assert report['completed_sessions'] == 3
     assert report['dining_duration'] == {'count': 2, 'average_seconds': 1200, 'minimum_seconds': 600, 'maximum_seconds': 1800}
     assert report['total'] == 2400 and report['methods']['QR'] == 2400

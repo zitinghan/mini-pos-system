@@ -4,6 +4,8 @@ A local-network point-of-sale system for **可可·南洋咖啡店 (KE KE / KOPI
 
 Staff select a table, choose food and options, then submit an order to the kitchen. Cashiers review the combined table bill, record payment, and release the table. Normal restaurant operation requires no external internet connection.
 
+The 2026-11-08 update adds recorded paid-first amounts and balance-only checkout (no payment selector when fully paid), a **12:00 noon** Kuala Lumpur business-day boundary, fixed **RM3.00** canned drinks without temperature options, smooth category scrolling, draft Remove beside Edit, and a shared **下单中** badge on table cards with unconfirmed draft items. Migrations `0012_prepaid_balances` and `0013_canned_fixed_price` preserve order/payment/receipt history. See the [user guide](docs/user-guide.md) and [migration details](docs/table-controls.md).
+
 ## Features
 
 - **Tables:** T01–T20, availability labels, submitted totals, portion counts, and elapsed time.
@@ -13,8 +15,8 @@ Staff select a table, choose food and options, then submit an order to the kitch
 - **Table controls:** cancel unpaid items or a whole table with stall cancellation notices; edit table/round remarks; add a manual paid-first label without recording a sale. 面粉粿 has regular/big portions and canned drinks have seven brand choices. See [操作说明](docs/table-controls.md).
 - **Pricing:** integer sen, server-side validation, and submitted price snapshots that preserve historical bills.
 - **Kitchen printing:** transactional print queue, mock PNG previews, ESC/POS network output, delivery tracking, and audited manual reprints.
-- **Payments:** cash with change calculation, manually confirmed QR payments, and other full-table payments.
-- **Reports:** completed transactions and daily cash/QR/other totals in `Asia/Kuala_Lumpur`.
+- **Payments:** recorded partial/full paid-first amounts, remaining cash with change, manually confirmed QR and other collections; one final sale per cleared table.
+- **Reports:** completed transactions and cash/QR/other totals per business day (noon to next noon) in `Asia/Kuala_Lumpur`.
 - **Access:** named staff and admin/cashier accounts, hashed PINs, expiring sessions, and initial administrator setup.
 - **Mobile interface:** Simplified Chinese labels, large touch controls, responsive layouts, and PWA assets.
 - **Recovery:** persistent SQLite storage, database migrations, and SQLite-safe backup/restore scripts.

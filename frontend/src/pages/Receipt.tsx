@@ -33,7 +33,14 @@ export function ReceiptPaper({ receipt }: { receipt: CustomerReceipt }) {
       {receipt.offer_reason && <p className="order-notes">优惠备注：{receipt.offer_reason}</p>}
     </>}
     <div className="receipt-total"><strong>合计 TOTAL</strong><strong>{money(receipt.total)}</strong></div>
-    <div className="receipt-meta"><span>付款方式</span><strong>{label(receipt.method)}</strong></div>
+    {!!receipt.settlement?.prepaid_total && <>
+      <div className="receipt-meta"><span>此前已付</span><strong>{money(receipt.settlement.prepaid_total)}</strong></div>
+      <div className="receipt-meta"><span>本次收款</span><strong>{money(receipt.settlement.additional_collected)}</strong></div>
+      <div className="receipt-meta"><span>剩余应收</span><strong>{money(0)}</strong></div>
+    </>}
+    {receipt.settlement?.prepaid_total ? Object.entries(receipt.settlement.allocations).map(([method,amount])=>
+      <div className="receipt-meta" key={method}><span>{label(method)}</span><strong>{money(amount!)}</strong></div>)
+      : <div className="receipt-meta"><span>付款方式</span><strong>{label(receipt.method)}</strong></div>}
     <div className="receipt-meta"><span>实收</span><strong>{money(receipt.received)}</strong></div>
     <div className="receipt-meta"><span>找零</span><strong>{money(receipt.change)}</strong></div>
     <p className="receipt-thanks">谢谢光临 · THANK YOU</p>

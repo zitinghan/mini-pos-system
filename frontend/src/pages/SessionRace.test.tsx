@@ -42,3 +42,34 @@ it('keeps the next selected dish open when the previous add finishes saving', as
   view.unmount();
   client.clear();
 });
+
+it('smoothly scrolls to the updated item list on every category click, including the selected category', async () => {
+  const scroll = vi.fn();
+  const original = Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollIntoView');
+  Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', {configurable:true,value:scroll});
+  apiMock.mockImplementation((path:string)=>Promise.resolve(path.endsWith('/bill')
+    ? {session_id:1,table:'T01',status:'OCCUPIED',items:[],total:0,item_count:0,has_drafts:false}
+    : path.endsWith('/orders') ? [] : [
+      {id:1,name:'云吞面',base_price:800,category_code:'MAINS',groups:[]},
+      {id:2,name:'Milo',base_price:300,category_code:'DRINKS',groups:[]},
+    ]));
+  useAuth.getState().signIn('token',{id:1,name:'owner',role:'ADMIN'});
+  const client = new QueryClient({defaultOptions:{queries:{retry:false}}});
+  const view = render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/session/1']}>
+    <Routes><Route path="/session/:id" element={<Session/>}/></Routes></MemoryRouter></QueryClientProvider>);
+  try {
+    const mains=await screen.findByRole('button',{name:/主食/});
+    expect(scroll).not.toHaveBeenCalled();
+    for (const category of [screen.getByRole('button',{name:/饮料/}),mains,mains]) {
+      fireEvent.click(category);
+      expect(scroll).toHaveBeenLastCalledWith({behavior:'smooth',block:'start'});
+      expect(scroll.mock.contexts.at(-1)).toBe(screen.getByRole('region',{name:'餐点选择'}));
+    }
+    expect(scroll).toHaveBeenCalledTimes(3);
+    expect(screen.getByRole('button',{name:/^云吞面 RM/})).toBeVisible();
+  } finally {
+    view.unmount();client.clear();
+    if(original)Object.defineProperty(HTMLElement.prototype,'scrollIntoView',original);
+    else Reflect.deleteProperty(HTMLElement.prototype,'scrollIntoView');
+  }
+});

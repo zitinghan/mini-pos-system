@@ -275,8 +275,8 @@ def test_submission_and_outbox_roll_back_together(client, headers, monkeypatch):
     assert client.get(f'/api/table-sessions/{session}/bill', headers=headers).json()['total'] == 0
 
 
-def test_daily_report_uses_kuala_lumpur_midnight(client, headers):
-    times = ['2026-11-02T15:59:59+00:00', '2026-11-02T16:00:00+00:00', '2026-11-03T15:59:59+00:00', '2026-11-03T16:00:00+00:00']
+def test_daily_report_uses_kuala_lumpur_noon(client, headers):
+    times = ['2026-11-03T03:59:59+00:00', '2026-11-03T04:00:00+00:00', '2026-11-04T03:59:59+00:00', '2026-11-04T04:00:00+00:00']
     with transaction() as db:
         user = db.scalar(select(User).where(User.name == 'cashier'))
         for timestamp in times:

@@ -12,6 +12,8 @@ def replay(db, action, key, identity, data):
     payload = data.model_dump()
     if 'prepaid_method' in payload and 'prepaid_method' not in data.model_fields_set:
         payload.pop('prepaid_method')  # Preserve retries sent before payment-method labels existed.
+    if 'prepaid_amount' in payload and 'prepaid_amount' not in data.model_fields_set:
+        payload.pop('prepaid_amount')
     fingerprint = hashlib.sha256(json.dumps({'identity': identity, **payload}, sort_keys=True).encode()).hexdigest()
     previous = db.scalar(select(AuditLog).where(AuditLog.request_key == key))
     if previous:
@@ -54,7 +56,7 @@ def print_notices(db, session, record, items, order_type, batch=None, reason='',
             'table_notes': session.notes, 'notes': batch.notes if batch else '',
             'reason': reason, 'note_scope': note_scope, 'items': relevant if order_type in ('CANCEL', 'RESTORE') else []}
         if batch:
-            ticket.update(batch_id=batch.id, prepaid_label=batch.prepaid_label, prepaid_method=batch.prepaid_method)
+            ticket.update(batch_id=batch.id, prepaid_label=batch.prepaid_label, prepaid_method=batch.prepaid_method, prepaid_amount=batch.prepaid_amount)
         job = PrintJob(batch_id=batch.id if batch else None, session_id=session.id,
             change_id=record.id, routing_group=station, ticket=ticket)
         db.add(job); db.flush()
@@ -139,16 +141,26 @@ def batch_details(db, batch_id, data, key, user):
     elif batch.status != 'SUBMITTED': raise HTTPException(409, 'Order already cancelled')
     if batch.info_revision != data.expected_revision:
         raise HTTPException(409, 'Remarks changed; refresh before saving')
-    before = {'notes': batch.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method, 'info_revision': batch.info_revision}
+    before = {'notes': batch.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method, 'prepaid_amount': batch.prepaid_amount, 'info_revision': batch.info_revision}
     record = audit(db, user, 'BATCH_DETAILS', key, fingerprint, before)
     method = data.prepaid_method if 'prepaid_method' in data.model_fields_set else batch.prepaid_method
     if not data.prepaid_label: method = None
-    changed = batch.notes != data.notes.strip() or batch.prepaid_label != data.prepaid_label or batch.prepaid_method != method
+    amount = batch.prepaid_amount
+    if not data.prepaid_label:
+        amount = None
+    elif 'prepaid_amount' in data.model_fields_set and data.prepaid_amount is not None:
+        amount = data.prepaid_amount
+    elif not batch.prepaid_label:
+        amount = sum(item.line_total for item in db.scalars(select(OrderItem).where(
+            OrderItem.batch_id == batch.id, OrderItem.status == batch.status)))
+    changed = (batch.notes != data.notes.strip() or batch.prepaid_label != data.prepaid_label
+        or batch.prepaid_method != method or batch.prepaid_amount != amount)
     if changed:
         batch.notes, batch.prepaid_label = data.notes.strip(), data.prepaid_label
         batch.prepaid_method = method
+        batch.prepaid_amount = amount
         batch.info_revision += 1
     items = [orders.item_data(db, item) for item in db.scalars(select(OrderItem).where(OrderItem.batch_id == batch.id, OrderItem.status == 'SUBMITTED'))]
     jobs = print_notices(db, session, record, items, 'NOTE', batch, note_scope='BATCH') if changed else []
-    result = {'notes': batch.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method, 'info_revision': batch.info_revision, 'print_jobs': jobs}
+    result = {'notes': batch.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method, 'prepaid_amount': batch.prepaid_amount, 'info_revision': batch.info_revision, 'print_jobs': jobs}
     return finish(record, result, result)

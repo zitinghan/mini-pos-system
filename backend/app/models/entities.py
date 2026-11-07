@@ -122,6 +122,7 @@ class OrderBatch(Record, Base):
     notes: Mapped[str] = mapped_column(default='')
     prepaid_label: Mapped[bool] = mapped_column(default=False)
     prepaid_method: Mapped[str | None]
+    prepaid_amount: Mapped[int | None]
     info_revision: Mapped[int] = mapped_column(default=1)
     __table_args__ = (
         Index('uq_user_draft', 'session_id', 'user_id', unique=True, sqlite_where=text("status = 'DRAFT'")),
@@ -167,6 +168,7 @@ class Payment(Record, Base):
     total: Mapped[int]
     original_total: Mapped[int | None]
     offer_reason: Mapped[str] = mapped_column(default='')
+    settlement: Mapped[dict | None] = mapped_column(JSON)
     received: Mapped[int]
     change: Mapped[int]
     __table_args__ = (

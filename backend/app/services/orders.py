@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from app.services.pricing import SelectionGroup, PriceValidationError, calculate_price
 from app.services import promotions
+from app.services import prepayments
 from app.database.seed import CUSTOM_ITEM_SKU
 from app.printing.stations import STATIONS
 from app.models.entities import (MenuItem, MenuCategory, ModifierGroup, ModifierOption, MenuItemModifierGroup,
@@ -126,7 +127,7 @@ def item_data(db, item):
 
 def batches(db, session_id):
     return [{'id': b.id, 'status': b.status, 'created_at': b.created_at, 'submitted_at': b.submitted_at, 'notes': b.notes,
-             'prepaid_label': b.prepaid_label, 'prepaid_method': b.prepaid_method, 'info_revision': b.info_revision,
+             'prepaid_label': b.prepaid_label, 'prepaid_method': b.prepaid_method, 'prepaid_amount': b.prepaid_amount, 'info_revision': b.info_revision,
              'user_id': b.user_id,
              'items': [item_data(db, i) for i in db.scalars(select(OrderItem).where(OrderItem.batch_id == b.id).order_by(OrderItem.id))]}
         for b in db.scalars(select(OrderBatch).where(OrderBatch.session_id == session_id).order_by(OrderBatch.id))]
@@ -137,19 +138,23 @@ def bill(db, session_id):
     items = list(db.scalars(select(OrderItem).join(OrderBatch).where(OrderBatch.session_id == session_id, OrderBatch.status == 'SUBMITTED', OrderItem.status == 'SUBMITTED')))
     batch_rows = list(db.scalars(select(OrderBatch).where(OrderBatch.session_id == session_id).order_by(OrderBatch.id)))
     all_rows = list(db.scalars(select(OrderItem).join(OrderBatch).where(OrderBatch.session_id == session_id).order_by(OrderItem.id)))
-    active_batches = [row for row in batch_rows if row.id in {item.batch_id for item in items}]
-    labelled = any(row.prepaid_label for row in active_batches)
+    draft_ids = {row.id for row in batch_rows if row.status == 'DRAFT'}
+    credits = prepayments.summary(batch_rows, all_rows)
+    labelled = bool(credits['rounds'])
     recovery = db.scalar(select(PaymentReversal).where(PaymentReversal.restored_session_id == session_id))
     prior_payment = db.get(Payment, recovery.payment_id) if recovery else None
     item_snapshots = [item_data(db, item) for item in items]
     token = hashlib.sha256(json.dumps({'status': session.status, 'notes': session.notes, 'revision': session.metadata_revision,
-        'batches': [(row.id, row.status, row.info_revision, row.notes, row.prepaid_label, row.prepaid_method) for row in batch_rows],
+        'batches': [(row.id, row.status, row.info_revision, row.notes, row.prepaid_label, row.prepaid_method, row.prepaid_amount) for row in batch_rows],
         'items': [(row.id, row.status, row.revision, row.quantity, row.line_total) for row in all_rows]}, sort_keys=True).encode()).hexdigest()
     return {'session_id': session.id, 'table': require(db, RestaurantTable, session.table_id).name,
         'table_notes': session.notes, 'metadata_revision': session.metadata_revision, 'change_token': token,
         'has_prepaid_label': labelled,
-        'prepaid_rounds': [{'batch_id':row.id,'method':row.prepaid_method} for row in active_batches if row.prepaid_label],
-        'prepaid_label_status': ('ALL' if all(row.prepaid_label for row in active_batches) else 'PARTIAL') if labelled else None,
+        'ordering_in_progress': any(row.status == 'DRAFT' and row.batch_id in draft_ids for row in all_rows),
+        'prepaid_rounds': credits['rounds'], 'prepaid_total': credits['total'], 'prepaid_token': credits['token'],
+        'remaining_amount': max(0, sum(i.line_total for i in items)-credits['total']),
+        'overpaid_amount': max(0, credits['total']-sum(i.line_total for i in items)),
+        'prepaid_label_status': ('ALL' if credits['total'] >= sum(i.line_total for i in items) else 'PARTIAL') if labelled else None,
         'recovery_offer': {'original_total': prior_payment.original_total if prior_payment.original_total is not None else sum(i.line_total for i in items),
             'total': prior_payment.total, 'offer_reason': prior_payment.offer_reason} if prior_payment else None,
         'all_takeaway': bool(item_snapshots) and all(item['takeaway'] or any(modifier['name'] == '打包' for modifier in item['modifiers']) for item in item_snapshots),
@@ -159,7 +164,7 @@ def bill(db, session_id):
         'closed_at': session.closed_at, 'dining_duration_seconds': dining_duration(session),
         'order_notes': [{'batch_id': batch.id, 'notes': batch.notes} for batch in batch_rows
             if batch.notes and batch.id in {item.batch_id for item in items}],
-        'has_drafts': db.scalar(select(OrderBatch.id).where(OrderBatch.session_id == session_id, OrderBatch.status == 'DRAFT').limit(1)) is not None}
+        'has_drafts': bool(draft_ids)}
 
 
 def editable_batch(db, identity, user):
@@ -172,7 +177,7 @@ def editable_batch(db, identity, user):
     return batch
 
 
-def submit(db, identity, key, user, notes=None, prepaid_label=None, prepaid_method=None, method_provided=False):
+def submit(db, identity, key, user, notes=None, prepaid_label=None, prepaid_method=None, method_provided=False, prepaid_amount=None, amount_provided=False):
     batch = require(db, OrderBatch, identity)
     if batch.user_id != user['id'] and user['role'] != 'ADMIN':
         raise HTTPException(403, 'This draft belongs to another staff member')
@@ -184,12 +189,15 @@ def submit(db, identity, key, user, notes=None, prepaid_label=None, prepaid_meth
         original_notes = original.details['notes'] if original else previous.notes
         original_label = original.details['prepaid_label'] if original else previous.prepaid_label
         original_method = original.details.get('prepaid_method') if original else previous.prepaid_method
+        original_amount = original.details.get('requested_prepaid_amount', original.details.get('prepaid_amount')) if original else previous.prepaid_amount
         if notes is not None and notes.strip() != original_notes:
             raise HTTPException(409, 'Idempotency key reused with different order notes')
         if prepaid_label is not None and prepaid_label != original_label:
             raise HTTPException(409, 'Idempotency key reused with different paid label')
         if method_provided and (prepaid_method if original_label else None) != original_method:
             raise HTTPException(409, 'Idempotency key reused with different paid method')
+        if amount_provided and (prepaid_amount if original_label else None) != original_amount:
+            raise HTTPException(409, 'Idempotency key reused with different paid amount')
         return submission_result(db, previous)
     editable_batch(db, identity, user)
     if notes is not None:
@@ -221,6 +229,11 @@ def submit(db, identity, key, user, notes=None, prepaid_label=None, prepaid_meth
         for modifier in modifiers:
             option = next(o for o in options if o.id == modifier.option_id)
             modifier.name, modifier.price = option.name, option.price
+    if batch.prepaid_label:
+        batch.prepaid_amount = prepaid_amount if amount_provided and prepaid_amount is not None else (
+            batch.prepaid_amount if batch.prepaid_amount is not None else sum(item.line_total for item in items))
+    else:
+        batch.prepaid_amount = None
     batch.status, batch.submission_key, batch.submitted_at = 'SUBMITTED', key, now()
     db.flush()
     session = require(db, TableSession, batch.session_id)
@@ -230,14 +243,15 @@ def submit(db, identity, key, user, notes=None, prepaid_label=None, prepaid_meth
     session.status = 'OCCUPIED'
     ticket = {'table': require(db, RestaurantTable, session.table_id).name, 'batch_id': batch.id,
         'time': batch.submitted_at, 'order_type': order_type, 'restaurant': '可可·南洋咖啡店', 'notes': batch.notes,
-        'table_notes': session.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method,
+        'table_notes': session.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method, 'prepaid_amount': batch.prepaid_amount,
         'items': [item_data(db, i) for i in items]}
     for station, _ in STATIONS:
         station_items = [item for item in ticket['items'] if item['printer_group'] == station]
         if station_items:
             db.add(PrintJob(batch_id=batch.id, session_id=session.id, routing_group=station, ticket={**ticket, 'items': station_items}))
     db.add(AuditLog(user_id=user['id'], action='SUBMIT_BATCH', request_key=key,
-        details={'batch_id': batch.id, 'notes': batch.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method}))
+        details={'batch_id': batch.id, 'notes': batch.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method,
+            'prepaid_amount': batch.prepaid_amount, 'requested_prepaid_amount': prepaid_amount if batch.prepaid_label else None}))
     db.flush()
     return submission_result(db, batch)
 
@@ -251,7 +265,7 @@ def submission_result(db, batch):
 
 
 def payment_data(payment):
-    return {k: getattr(payment, k) for k in ('id', 'session_id', 'method', 'total', 'original_total', 'offer_reason', 'received', 'change', 'created_at')}
+    return {k: getattr(payment, k) for k in ('id', 'session_id', 'method', 'total', 'original_total', 'offer_reason', 'settlement', 'received', 'change', 'created_at')}
 
 
 def pay(db, session_id, data, key, user):
@@ -260,6 +274,8 @@ def pay(db, session_id, data, key, user):
     if details['final_total'] is None: details.pop('final_total')
     if not details['offer_reason']: details.pop('offer_reason')
     if not details['print_receipt']: details.pop('print_receipt')
+    for field in ('expected_prepaid_total','expected_prepaid_token'):
+        if details[field] is None: details.pop(field)
     fingerprint = hashlib.sha256(json.dumps({'session_id': session_id, **details}, sort_keys=True).encode()).hexdigest()
     previous = db.scalar(select(Payment).where(Payment.idempotency_key == key))
     if previous:
@@ -277,24 +293,42 @@ def pay(db, session_id, data, key, user):
     total = current['total'] if data.final_total is None else data.final_total
     if total > current['total']:
         raise HTTPException(422, '优惠后总价不可高于原价。')
+    prepaid = current['prepaid_total']
+    if prepaid and (data.expected_prepaid_total is None or data.expected_prepaid_token is None):
+        raise HTTPException(409, '此桌已有已付金额，请刷新收银页后只收剩余金额。')
+    if ((data.expected_prepaid_total is not None and data.expected_prepaid_total != prepaid)
+            or (data.expected_prepaid_token is not None and data.expected_prepaid_token != current['prepaid_token'])):
+        raise HTTPException(409, '已付金额或方式已改变，请刷新后重新核对。')
+    if prepaid > total:
+        raise HTTPException(422, '已付超过应付，请先处理退款并更正已付金额。')
+    remaining = total-prepaid
+    if remaining and data.method is None:
+        raise HTTPException(422, '请选择剩余款项的付款方式。')
+    if not remaining and prepaid and data.received:
+        raise HTTPException(422, '此桌已付全款，本次无需再收款。')
     if current['has_drafts'] and not data.discard_drafts:
         raise HTTPException(409, 'Unsubmitted drafts exist; submit or explicitly discard them')
-    if data.method == 'CASH' and data.received < total:
+    if remaining and data.method == 'CASH' and data.received < remaining:
         raise HTTPException(422, 'Insufficient cash')
     if current['has_drafts']:
         for draft in db.scalars(select(OrderBatch).where(OrderBatch.session_id == session_id, OrderBatch.status == 'DRAFT')):
             draft.status = 'CANCELLED'
             for item in db.scalars(select(OrderItem).where(OrderItem.batch_id == draft.id)):
                 item.status = 'CANCELLED'
-    received = data.received if data.method == 'CASH' else total
+    additional_received = data.received if remaining and data.method == 'CASH' else remaining
+    received = prepaid+additional_received
+    allocations = prepayments.allocate(current['prepaid_rounds'],data.method,remaining)
+    method = next(iter(allocations)) if len(allocations)==1 else 'OTHER' if allocations else data.method or 'OTHER'
+    settlement = {'prepaid_total':prepaid,'additional_collected':remaining,'allocations':allocations,
+        'prepaid_rounds':current['prepaid_rounds'],'additional_method':data.method if remaining else None}
     payment = Payment(session_id=session_id, user_id=user['id'], idempotency_key=key, request_hash=fingerprint,
-        method=data.method, original_total=current['total'], total=total, offer_reason=data.offer_reason.strip() if total != current['total'] else '',
-        received=received, change=received-total)
+        method=method, original_total=current['total'], total=total, offer_reason=data.offer_reason.strip() if total != current['total'] else '',
+        received=received, change=received-total, settlement=settlement)
     db.add(payment)
     timestamp = now()
     payment.created_at = timestamp
     session.status, session.closed_at, session.paid_at = 'PAID', timestamp, timestamp
-    db.add(AuditLog(user_id=user['id'], action='PAYMENT', details={'session_id': session_id, 'method': data.method,
+    db.add(AuditLog(user_id=user['id'], action='PAYMENT', details={'session_id': session_id, 'method': method, 'settlement':settlement,
         'original_total': current['total'], 'total': total, 'discount': current['total']-total, 'offer_reason': payment.offer_reason,
         'print_receipt': data.print_receipt}))
     db.flush()

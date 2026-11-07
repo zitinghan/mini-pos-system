@@ -10,6 +10,19 @@ const apiMock = vi.hoisted(() => vi.fn());
 vi.mock('../services/api', () => ({ api: apiMock, requestKey: () => 'test-key', clearKey: vi.fn() }));
 afterEach(() => { apiMock.mockReset(); useAuth.getState().signOut(); });
 
+it('shows the shared ordering badge without changing table availability and hides it after submission',async()=>{
+  let pending=true;
+  apiMock.mockImplementation(()=>Promise.resolve([{id:1,name:'T01',status:'AVAILABLE',session_id:1,total:0,item_count:0,ordering_in_progress:pending}]));
+  const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+  const view=render(<QueryClientProvider client={client}><MemoryRouter><Tables/></MemoryRouter></QueryClientProvider>);
+  expect(await screen.findByText('下单中')).toHaveClass('table-ordering-note');
+  expect(screen.getByRole('button',{name:/^T01/})).toHaveClass('AVAILABLE');
+  pending=false;
+  await client.invalidateQueries({queryKey:['tables']});
+  await waitFor(()=>expect(screen.queryByText('下单中')).not.toBeInTheDocument());
+  view.unmount();client.clear();
+});
+
 it('shows waiting takeaway and green paid labels without changing the underlying order state',async()=>{
   let packed=true;
   apiMock.mockImplementation(()=>Promise.resolve([{id:1,name:'T01',status:'OCCUPIED',session_id:1,total:800,item_count:1,

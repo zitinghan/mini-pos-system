@@ -23,9 +23,14 @@ def strike_from(lines, start):
         lines[index] = (StyledText(text, strike=True), size)
 
 
+def money(sen):
+    return f'RM {sen // 100}.{sen % 100:02d}'
+
+
 def prepaid_description(ticket):
     method = {'CASH':'现金 CASH','QR':'二维码 QR','OTHER':'其他 OTHER'}.get(ticket.get('prepaid_method'))
-    return f"已付款（手动标记） · {method}" if method else '已付款（手动标记）'
+    description = f"已付款（手动标记） · {method}" if method else '已付款（手动标记）'
+    return f"{description} · {money(ticket['prepaid_amount'])}" if ticket.get('prepaid_amount') is not None else description
 
 
 def ticket_lines(ticket, reprint=False):
@@ -108,9 +113,6 @@ def ticket_lines(ticket, reprint=False):
 
 
 def receipt_lines(receipt, reprint=False):
-    def money(sen):
-        return f'RM {sen // 100}.{sen % 100:02d}'
-
     lines = [('REPRINT / 重印', 25)] if reprint else []
     lines.extend([(receipt['restaurant'], 32), (receipt.get('english_name', 'KE KE / KOPITIAM'), 20),
         ('收据 / RECEIPT', 30), (f"桌号 {receipt['table']}", 40),
@@ -140,6 +142,11 @@ def receipt_lines(receipt, reprint=False):
             (f"优惠 -{money(receipt['original_total'] - receipt['total'])}", 28)])
         if receipt.get('offer_reason'):
             lines.append((f"优惠备注 {receipt['offer_reason']}", 26))
+    settlement = receipt.get('settlement') or {}
+    if settlement.get('prepaid_total'):
+        lines.extend([(f"此前已付 {money(settlement['prepaid_total'])}", 28),
+            (f"本次收款 {money(settlement['additional_collected'])}", 28), ('剩余 RM 0.00', 28)])
+        method = ' / '.join(f"{name} {money(amount)}" for name, amount in settlement['allocations'].items())
     lines.extend([('========================', 20), (f"合计 {money(receipt['total'])}", 36),
         (method, 26), (f"实收 {money(receipt['received'])}", 28), (f"找零 {money(receipt['change'])}", 28),
         ('谢谢光临 / THANK YOU', 22)])

@@ -54,6 +54,7 @@ export default function Tables() {
               : open.mutate(table.id)}>
             <span className="table-name">{table.name}</span>
             <span className="status">{table.status==='OCCUPIED'&&table.all_takeaway?'等待打包':label(table.status)}</span>
+            {table.ordering_in_progress && <span className="pill table-ordering-note">下单中</span>}
             {table.prepaid_label_status&&<span className="table-paid-note">{table.prepaid_label_status==='ALL'?'已付款':'部分已付款'}</span>}
             <strong>{money(table.total)}</strong>
             <small>{table.item_count} 份 · <span className={table.wait_alert_due ? 'elapsed overdue' : 'elapsed'}>{table.first_order_at ? elapsed(table.first_order_at) : '尚未下单'}</span></small>

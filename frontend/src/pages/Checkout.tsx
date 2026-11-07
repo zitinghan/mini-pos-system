@@ -30,6 +30,10 @@ export default function Checkout() {
   const currentOfferReason = offerReason ?? restoredOffer?.offer_reason ?? '';
   const finalTotal = parseSen(finalText);
   const validOffer = finalTotal !== null && finalTotal <= total;
+  const prepaid = bill.data?.prepaid_total ?? 0;
+  const remaining = Math.max(0, (finalTotal ?? total) - prepaid);
+  const fullyPaid = prepaid > 0 && remaining === 0;
+  const overpaid = validOffer && prepaid > finalTotal!;
   const hasDrafts = bill.data?.has_drafts ?? false;
   useEffect(() => {
     setDiscard(false);
@@ -37,9 +41,11 @@ export default function Checkout() {
   const pay = useMutation({
     mutationFn: () => {
       const payload = {
-        method,
-        received: method === 'CASH' ? (sen ?? (finalTotal === 0 ? 0 : null)) : finalTotal,
+        ...(fullyPaid ? {} : { method }),
+        received: fullyPaid ? 0 : method === 'CASH' ? (sen ?? (remaining === 0 ? 0 : null)) : remaining,
         expected_total: total,
+        expected_prepaid_total: prepaid,
+        expected_prepaid_token: bill.data?.prepaid_token,
         discard_drafts: discard,
         ...(printReceipt ? { print_receipt:true } : {}),
         ...(finalTotal !== total ? { final_total: finalTotal, offer_reason: currentOfferReason.trim() } : {}),
@@ -63,22 +69,22 @@ export default function Checkout() {
   const [displayUnavailable, setDisplayUnavailable] = useState(false);
   useEffect(() => {
     if (!id || !bill.data || bill.isError || bill.data.status !== 'PAYMENT_PENDING'
-      || !validOffer || pay.isPending || pay.isSuccess) return;
+      || !validOffer || overpaid || pay.isPending || pay.isSuccess) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void api<{ status: string }>(`/table-sessions/${id}/customer-display`, 'POST', {
-        expected_total: total, final_total: finalTotal,
+        expected_total: total, final_total: remaining, expected_prepaid_token: bill.data.prepaid_token,
       }).then((result) => {
         if (!cancelled) setDisplayUnavailable(result.status === 'unavailable');
       }).catch(() => { if (!cancelled) setDisplayUnavailable(true); });
     }, 300);
     return () => { cancelled = true; window.clearTimeout(timer); };
-  }, [id, total, finalTotal, validOffer, bill.data?.status, bill.isError, pay.isPending, pay.isSuccess]);
+  }, [id, total, remaining, validOffer, overpaid, bill.data?.prepaid_token, bill.data?.status, bill.isError, pay.isPending, pay.isSuccess]);
 
   if (bill.isPending) return <><Loading /><ErrorBox error={bill.error} /></>;
   const blocked = bill.isError || pay.isPending || !bill.data?.item_count || bill.data?.status !== 'PAYMENT_PENDING'
-    || (bill.data?.has_drafts && !discard) || !validOffer
-    || (method === 'CASH' && ((finalTotal! > 0 && sen === null) || (sen !== null && sen < finalTotal!)));
+    || (bill.data?.has_drafts && !discard) || !validOffer || overpaid
+    || (!fullyPaid && method === 'CASH' && ((remaining > 0 && sen === null) || (sen !== null && sen < remaining)));
 
   return (
     <>
@@ -87,8 +93,8 @@ export default function Checkout() {
       <ErrorBox error={bill.error || pay.error || resume.error} />
       {restoredOffer&&<p className="notice">此桌由误收款恢复，原收款已撤销。请重新核对金额及优惠后收款。</p>}
       {displayUnavailable && <p className="warning">顾客显示屏暂时无法连接，仍可正常收款。</p>}
-      {bill.data?.has_prepaid_label && <p className="warning">部分订单已手动标记先付款，请核实已收款项，避免重复收款。此处仍需完成收银记录。</p>}
-      {bill.data?.prepaid_rounds?.map((round)=><p className="muted" key={round.batch_id}>订单 #{round.batch_id} · 已付款标记：{round.method?label(round.method):'方式未记录'}</p>)}
+      {bill.data?.prepaid_rounds?.map((round)=><p className="muted" key={round.batch_id}>订单 #{round.batch_id} · 已付款 {money(round.amount)} · {round.method?label(round.method):'方式未记录'}
+        {round.amount_estimated && <span className="warning">（旧标记按该轮餐点估算，请返回订单核实并保存已付金额）</span>}</p>)}
       {bill.data?.status === 'OCCUPIED' && <p className="notice" role="status">
         此桌已恢复点餐，请返回订单页面重新核对账单并开始结账。
       </p>}
@@ -109,7 +115,11 @@ export default function Checkout() {
         {offer?.original === total && <button className="quiet" disabled={pay.isPending}
           onClick={() => { setOffer(null); setOfferReason(''); }}>恢复原价</button>}
         <div className="row spread"><h2>应收总额</h2><h1>{validOffer ? money(finalTotal!) : '请检查金额'}</h1></div>
-        <div className="option-grid">
+        <div className="row spread"><strong>已付金额</strong><strong>{money(prepaid)}</strong></div>
+        <div className="row spread"><strong>剩余应收</strong><strong>{validOffer ? money(remaining) : '请检查金额'}</strong></div>
+        {overpaid && <p className="error" role="alert">已付超过应付，请先处理退款并更正已付金额。</p>}
+        {fullyPaid && !overpaid && <p className="notice">已付全款，无需再次收款或选择付款方式。</p>}
+        {!fullyPaid && <><div className="option-grid">
           {[['CASH', '现金'], ['QR', '二维码'], ['OTHER', '其他']].map(([value, name]) => (
             <button key={value} className={method === value ? 'selected' : ''}
               aria-pressed={method === value} onClick={() => setMethod(value)}>{name}</button>
@@ -123,9 +133,9 @@ export default function Checkout() {
           </label>
           <div className="row spread">
             <strong>应找零</strong>
-            <strong>{validOffer && sen !== null && sen >= finalTotal! ? money(sen - finalTotal!) : '金额不足或格式有误'}</strong>
+            <strong>{validOffer && sen !== null && sen >= remaining ? money(sen - remaining) : '金额不足或格式有误'}</strong>
           </div>
-        </> : <p className="muted">请核实款项到账后点击收款。系统会直接完成收款、清台并生成收据。</p>}
+        </> : <p className="muted">请核实剩余款项到账后点击收款。系统会直接完成收款、清台并生成收据。</p>}</>}
         {bill.data?.has_drafts && (
           <label className="check warning">
             <input type="checkbox" checked={discard}
@@ -136,7 +146,7 @@ export default function Checkout() {
         <label className="check"><input type="checkbox" checked={printReceipt} disabled={pay.isPending}
           onChange={(event) => setPrintReceipt(event.target.checked)} />打印收据（默认不打印）</label>
         <button type="button" className="primary" disabled={!!blocked} onClick={() => pay.mutate()}>
-          {pay.isPending ? '正在收款…' : '确认收款并清台'}
+          {pay.isPending ? '正在收款…' : fullyPaid ? '确认已付款并清台' : '确认收款并清台'}
         </button>
         <button onClick={() => resume.mutate()} disabled={resume.isPending || pay.isPending}>返回继续加单</button>
       </section>

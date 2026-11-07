@@ -63,8 +63,13 @@ def test_cancelled_table_restores_only_preclosure_items_drafts_and_original_stal
 
 def test_paid_restore_reverses_revenue_keeps_originals_and_reuses_frozen_prices(client, headers):
     session,batch,_=placed(client,headers,('WANTAN_MEE','CURRY_RICE','MILO'),prepaid=True)
+    result=client.patch(f'/api/order-batches/{batch}/details',headers=key(headers),json={
+        'prepaid_label':True,'prepaid_method':'QR','prepaid_amount':1850,'notes':'','expected_revision':1})
+    assert result.status_code==200
+    credit=client.get(f'/api/table-sessions/{session}/bill',headers=headers).json()
     request=key(headers)
-    body={'method':'QR','expected_total':1900,'received':1850,'final_total':1850,'offer_reason':'熟客优惠'}
+    body={'expected_total':1900,'received':0,'final_total':1850,'offer_reason':'熟客优惠',
+        'expected_prepaid_total':1850,'expected_prepaid_token':credit['prepaid_token']}
     payment=client.post(f'/api/table-sessions/{session}/payments',headers=request,json=body).json()
     with transaction() as db:
         original_payment=row_snapshot(db.get(Payment,payment['id']))
@@ -99,7 +104,8 @@ def test_paid_restore_reverses_revenue_keeps_originals_and_reuses_frozen_prices(
         assert db.scalar(select(Receipt)).snapshot==original_receipt
         assert db.scalar(select(func.count()).select_from(PrintJob))==old_job_count
         assert db.scalar(select(func.count()).select_from(PaymentReversal))==1
-    second=client.post(f'/api/table-sessions/{recovered}/payments',headers=key(headers),json=body)
+    second=client.post(f'/api/table-sessions/{recovered}/payments',headers=key(headers),json={
+        'method':'QR','expected_total':1900,'received':1850,'final_total':1850,'offer_reason':'熟客优惠'})
     assert second.status_code==200
     report=client.get('/api/reports/daily-sales',headers=headers).json()
     assert report['total']==1850 and report['completed_sessions']==1

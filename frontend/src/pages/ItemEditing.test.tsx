@@ -32,3 +32,17 @@ it('shows the current configured price when changing a priced portion', () => {
   fireEvent.click(screen.getByRole('button', { name: '保存修改 · RM 42.00' }));
   expect(save).toHaveBeenCalledWith(3, [3, 2], '原备注', 1400);
 });
+
+it.each([['DRAFT',300],['SUBMITTED',330]])('drops retired canned temperatures from the editor and preserves %s pricing', (status,price) => {
+  const save=vi.fn();
+  const canned:MenuItem={id:2,name:'汽水 / 罐装',base_price:300,groups:[
+    {id:8,name:'品牌 / 口味',minimum:0,maximum:1,options:[{id:10,name:'Coke',price:0,is_default:false}]},
+    menu.groups[1],
+  ]};
+  const old:Line={...line,menu_item_id:2,name:canned.name,status:String(status),quantity:1,unit_price:330,line_total:330,
+    modifiers:[{option_id:90,name:'冰 ICED',price:0},{option_id:10,name:'Coke',price:0},{option_id:3,name:'堂食',price:0}]};
+  render(<ItemPicker item={canned} initial={old} onAdd={save} busy={false}/>);
+  expect(screen.queryByRole('button',{name:/热 HOT|冰 ICED/})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:`保存修改 · RM ${(Number(price)/100).toFixed(2)}`}));
+  expect(save).toHaveBeenCalledWith(1,[10,3],'原备注',Number(price));
+});

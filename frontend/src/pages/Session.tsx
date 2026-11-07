@@ -6,7 +6,7 @@ import type { MenuItem, Batch, Bill, CategoryCode, Line, CustomItemInput, Paymen
 import CustomItemForm from '../components/CustomItemForm';
 import { useAuth } from '../stores/auth';
 import { useUI } from '../stores/ui';
-import { money } from '../utils/format';
+import { money, parseSen } from '../utils/format';
 import { label } from '../utils/i18n';
 import { Lines, ErrorBox, Loading, ConfirmButton } from '../components/Common';
 
@@ -41,7 +41,7 @@ export function MenuItemButton({ item, selected, onSelect }: { item: MenuItem; s
 
 export function ItemPicker({ item, onAdd, busy, initial }: PickerProps) {
   const [selected, setSelected] = useState<number[]>(
-    initial ? [...initial.modifiers.map((entry) => entry.option_id), ...item.groups.filter((group) => ['用餐方式', '份量'].includes(group.name)
+    initial ? [...initial.modifiers.filter(entry => item.groups.some(group => group.options.some(option => option.id === entry.option_id))).map((entry) => entry.option_id), ...item.groups.filter((group) => ['用餐方式', '份量'].includes(group.name)
       && !group.options.some((option) => initial.modifiers.some((entry) => entry.option_id === option.id)))
       .flatMap((group) => group.options.filter((option) => option.is_default && option.enabled !== false).map((option) => option.id))]
       : item.groups.flatMap((group) => group.options.filter((option) => option.is_default && option.enabled !== false).map((option) => option.id)),
@@ -139,6 +139,9 @@ export default function Session() {
   const user = useAuth((state) => state.user);
   const [chosen, setChosen] = useState<MenuItem | null>(null);
   const optionsRef = useRef<HTMLDivElement>(null);
+  const itemsRef = useRef<HTMLDivElement>(null);
+  const categoriesRef = useRef<HTMLDivElement>(null);
+  const [categoryScrollRequest, setCategoryScrollRequest] = useState(0);
   const customRef = useRef<HTMLDivElement>(null);
   const [customOpen, setCustomOpen] = useState(false);
   const [category, setCategory] = useState<CategoryCode>('MAINS');
@@ -147,11 +150,13 @@ export default function Session() {
   const [orderNotes, setOrderNotes] = useState<string | null>(null);
   const [draftPaid, setDraftPaid] = useState<boolean | null>(null);
   const [draftMethod, setDraftMethod] = useState<PaymentMethod | null>(null);
+  const [draftAmount, setDraftAmount] = useState<string | null>(null);
   const [tableNotes, setTableNotes] = useState<string | null>(null);
   const [roundDetails, setRoundDetails] = useState<Batch | null>(null);
   const [roundNotes, setRoundNotes] = useState('');
   const [roundPaid, setRoundPaid] = useState(false);
   const [roundMethod, setRoundMethod] = useState<PaymentMethod | null>(null);
+  const [roundAmount, setRoundAmount] = useState('');
   const [cancelTarget, setCancelTarget] = useState<{kind:'ITEM';line:Line;batchId:number} | {kind:'TABLE';bill:Bill} | null>(null);
   const [cancelReason, setCancelReason] = useState('顾客取消');
   const bill = useQuery({
@@ -178,7 +183,7 @@ export default function Session() {
   const unavailableDrafts = drafts.filter((item) => menu.data?.some((entry) => entry.id === item.menu_item_id && entry.sold_out));
   const currentChosen = chosen ? menu.data?.find((item) => item.id === chosen.id) ?? chosen : null;
   const editingMenu = editing ? menu.data?.find((item) => item.id === editing.line.menu_item_id) : null;
-  useEffect(() => { setOrderNotes(null); setDraftPaid(null); setDraftMethod(null); }, [ownDraft?.id]);
+  useEffect(() => { setOrderNotes(null); setDraftPaid(null); setDraftMethod(null); setDraftAmount(null); }, [ownDraft?.id]);
 
   const saveTableNotes = useMutation({
     mutationFn: async () => {
@@ -192,7 +197,10 @@ export default function Session() {
   const saveRoundDetails = useMutation({
     mutationFn: async () => {
       if (!roundDetails) throw new Error('请选择订单');
-      const payload = { notes: roundNotes, prepaid_label: roundPaid, prepaid_method: roundPaid ? roundMethod : null, expected_revision: roundDetails.info_revision ?? 1 };
+      const amount = parseSen(roundAmount);
+      if (roundPaid && (amount === null || amount > 10000000)) throw new Error('请输入有效的已付金额');
+      const payload = { notes: roundNotes, prepaid_label: roundPaid, prepaid_method: roundPaid ? roundMethod : null,
+        prepaid_amount: roundPaid ? amount : null, expected_revision: roundDetails.info_revision ?? 1 };
       const scope = `batch-details:${roundDetails.id}:${JSON.stringify(payload)}`;
       const result = await api(`/order-batches/${roundDetails.id}/details`, 'PATCH', payload, requestKey(scope));
       clearKey(scope); return result;
@@ -288,7 +296,10 @@ export default function Session() {
       if (!ownDraft) throw new Error('草稿不存在');
       if (tableNotes !== null && tableNotes !== (bill.data?.table_notes ?? '')) await saveTableNotes.mutateAsync();
       const paid = draftPaid ?? ownDraft.prepaid_label ?? false;
-      const payload = { notes: orderNotes ?? ownDraft.notes ?? '', prepaid_label: paid, prepaid_method: paid ? draftMethod ?? ownDraft.prepaid_method ?? 'QR' : null };
+      const amount = draftAmount === null ? null : parseSen(draftAmount);
+      if (paid && draftAmount !== null && (amount === null || amount > 10000000)) throw new Error('请输入有效的已付金额');
+      const payload = { notes: orderNotes ?? ownDraft.notes ?? '', prepaid_label: paid, prepaid_method: paid ? draftMethod ?? ownDraft.prepaid_method ?? 'QR' : null,
+        ...(paid && draftAmount !== null ? {prepaid_amount:amount} : {}) };
       const scope = `submit:${ownDraft.id}:${JSON.stringify(payload)}`;
       const result = await api<{ batch_id: number; status?:string; print_job_id: number; print_jobs?: {id:number;routing_group:string}[] }>(
         `/order-batches/${ownDraft.id}/submit`, 'POST', payload, requestKey(scope),
@@ -326,8 +337,8 @@ export default function Session() {
     onError: setError,
   });
   const checkout = useMutation({
-    mutationFn: () => api(`/table-sessions/${id}/checkout`, 'POST'),
-    onSuccess: () => navigate(`/checkout/${id}`),
+    mutationFn: () => api<Bill>(`/table-sessions/${id}/checkout`, 'POST'),
+    onSuccess: (current) => { client.setQueryData(['bill', id], current); navigate(`/checkout/${id}`); },
     onError: setError,
   });
 
@@ -339,6 +350,11 @@ export default function Session() {
     if (chosen) optionsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }, [chosen]);
   useEffect(() => { if (customOpen) customRef.current?.scrollIntoView?.({ behavior:'smooth', block:'start' }); }, [customOpen]);
+  useEffect(() => {
+    if (!categoryScrollRequest || !itemsRef.current) return;
+    itemsRef.current.style.scrollMarginTop = `${(categoriesRef.current?.offsetHeight ?? 80) + 16}px`;
+    itemsRef.current.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [categoryScrollRequest]);
 
   if (bill.isPending || batches.isPending || menu.isPending) {
     return <><Loading /><ErrorBox error={bill.error || batches.error || menu.error} /></>;
@@ -363,14 +379,16 @@ export default function Session() {
         </div>
       )}
       {active && <>
-        <div className="category-tabs" role="group" aria-label="菜品分类">
+        <div ref={categoriesRef} className="category-tabs" role="group" aria-label="菜品分类">
           {([['MAINS', '主食', 'Mains'], ['SNACKS', '小吃', 'Snacks'], ['DRINKS', '饮料', 'Drinks'], ['BEER', '啤酒', 'Beer']] as const).map(([code, name, english]) => (
-            <button key={code} aria-pressed={category === code} onClick={() => { setCategory(code); setChosen(null); }}>
+            <button key={code} aria-pressed={category === code} onClick={() => {
+              setCategory(code); setChosen(null); setCategoryScrollRequest(value => value + 1);
+            }}>
               {name}<small>{english}</small>
             </button>
           ))}
         </div>
-        <div className="food-grid">
+        <div ref={itemsRef} className="food-grid" role="region" aria-label="餐点选择">
           {menu.data?.filter((item) => (item.category_code ?? 'MAINS') === category).map((item) => (
             <MenuItemButton key={item.id} item={item} selected={chosen?.id === item.id}
               onSelect={(selected) => setChosen({ ...selected })} />
@@ -389,18 +407,17 @@ export default function Session() {
       {ownDraft && (
         <section className="card stack">
           <div className="row spread"><h2>当前草稿</h2><span className="pill">未送厨房</span></div>
-          <Lines items={drafts} onEdit={active && !edit.isPending && !saveCustom.isPending ? (line) => startEdit(line, ownDraft.id) : undefined} />
-          {drafts.map((item) => (
-            <button key={item.id} className="quiet" disabled={remove.isPending}
-              onClick={() => remove.mutate(item.id)}>移除 {item.quantity} × {item.name}</button>
-          ))}
+          <Lines items={drafts} onEdit={active && !edit.isPending && !saveCustom.isPending && !remove.isPending ? (line) => startEdit(line, ownDraft.id) : undefined}
+            onRemove={active && !remove.isPending && !edit.isPending && !saveCustom.isPending && !submit.isPending ? (line) => remove.mutate(line.id) : undefined} />
           <strong>预计 {money(drafts.reduce((sum, item) => sum + item.line_total, 0))}</strong>
           <label>整单备注（选填）<textarea maxLength={500} rows={2} value={orderNotes ?? ownDraft.notes ?? ''}
             onChange={(event) => setOrderNotes(event.target.value)} placeholder="例如：一起上菜、先出饮料" /></label>
           <label className="check"><input type="checkbox" checked={draftPaid ?? ownDraft.prepaid_label ?? false}
             onChange={(event) => setDraftPaid(event.target.checked)} />本轮已付款（仅手动标记）</label>
-          {(draftPaid ?? ownDraft.prepaid_label ?? false)&&<PrepaidMethod value={draftMethod ?? ownDraft.prepaid_method ?? 'QR'} onChange={setDraftMethod}/>}
-          <small>只作订单提示，不登记收款或自动清台；下一轮默认不标记。</small>
+          {(draftPaid ?? ownDraft.prepaid_label ?? false)&&<><PrepaidMethod value={draftMethod ?? ownDraft.prepaid_method ?? 'QR'} onChange={setDraftMethod}/>
+            <label>本轮已付金额 (RM)<input inputMode="decimal" value={draftAmount ?? ((ownDraft.prepaid_amount ?? drafts.reduce((sum,item)=>sum+item.line_total,0))/100).toFixed(2)}
+              onChange={(event)=>setDraftAmount(event.target.value)}/></label></>}
+          <small>默认本轮全款，可改成部分金额；最后结账只收差额，不会自动清台。</small>
           <small>价格以确认下单时菜单为准。</small>
           {unavailableDrafts.length > 0 && <p className="warning" role="alert">{unavailableDrafts.map((item) => item.name).join('、')} 已售罄，请先移除或等待恢复供应。</p>}
           <button className="primary" disabled={!active || !drafts.length || unavailableDrafts.length > 0 || submit.isPending || add.isPending || addCustom.isPending || saveCustom.isPending || edit.isPending || cancelOrder.isPending || saveTableNotes.isPending}
@@ -415,11 +432,13 @@ export default function Session() {
         {batches.data?.filter((batch) => batch.status !== 'DRAFT').map((batch) => (
           <div key={batch.id}>
             <p className="batch-heading">#{batch.id} · {label(batch.status)}</p>
-            {batch.prepaid_label && <strong className="pill"><span>已付款（手动标记）</span>{batch.prepaid_method&&<span> · {label(batch.prepaid_method)}</span>}</strong>}
+            {batch.prepaid_label && <strong className="pill"><span>已付款（手动标记）</span>{batch.prepaid_method&&<span> · {label(batch.prepaid_method)}</span>}
+              {batch.prepaid_amount!=null&&<span> · {money(batch.prepaid_amount)}</span>}</strong>}
             {batch.notes && <p className="order-notes">整单备注：{batch.notes}</p>}
             {active && batch.status === 'SUBMITTED' && <button className="quiet" onClick={() => {
               saveRoundDetails.reset(); setRoundDetails(batch); setRoundNotes(batch.notes ?? ''); setRoundPaid(batch.prepaid_label ?? false);
               setRoundMethod(batch.prepaid_method ?? (batch.prepaid_label ? null : 'QR'));
+              setRoundAmount(((batch.prepaid_amount ?? batch.items.filter(item=>item.status==='SUBMITTED').reduce((sum,item)=>sum+item.line_total,0))/100).toFixed(2));
             }}>修改本轮备注 / 付款标记</button>}
             <Lines items={batch.items} onEdit={active && batch.status === 'SUBMITTED' && !edit.isPending && !saveCustom.isPending && !cancelOrder.isPending ? (line) => startEdit(line, batch.id) : undefined}
               onCancel={active && batch.status === 'SUBMITTED' && !edit.isPending && !saveCustom.isPending && !cancelOrder.isPending ? (line) => startCancelItem(line, batch.id) : undefined} />
@@ -470,8 +489,9 @@ export default function Session() {
           <label className="check"><input type="checkbox" checked={roundPaid} onChange={(event) => {
             setRoundPaid(event.target.checked); if(event.target.checked&&roundMethod===null)setRoundMethod('QR');
           }} />本轮已付款（仅手动标记）</label>
-          {roundPaid&&<PrepaidMethod value={roundMethod} onChange={setRoundMethod}/>}
-          <small>不会生成收款记录，也不会重复下单。</small><ErrorBox error={saveRoundDetails.error} />
+          {roundPaid&&<><PrepaidMethod value={roundMethod} onChange={setRoundMethod}/>
+            <label>本轮已付金额 (RM)<input inputMode="decimal" value={roundAmount} onChange={(event)=>setRoundAmount(event.target.value)}/></label></>}
+          <small>填写实际已收金额，最后结账只收差额；不会重复下单。</small><ErrorBox error={saveRoundDetails.error} />
           <button className="primary" disabled={saveRoundDetails.isPending} onClick={() => saveRoundDetails.mutate()}>保存备注 / 标记</button>
           <button onClick={() => setRoundDetails(null)}>返回</button>
         </div>

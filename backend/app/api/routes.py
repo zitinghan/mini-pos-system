@@ -17,6 +17,7 @@ from app.services import order_edits
 from app.services import table_controls
 from app.services import table_attention
 from app.services import sales
+from app.services import business_days
 from app.services import custom_items
 from app.services import table_recovery
 from app.schemas.requests import RestoreTable
@@ -140,6 +141,7 @@ def tables(user=Depends(current_user)):
                  'wait_alert_acknowledged_at': session.wait_alert_acknowledged_at if session else None,
                  'prepaid_label_status': current.get('prepaid_label_status'),
                  'all_takeaway': current.get('all_takeaway', False),
+                 'ordering_in_progress': current.get('ordering_in_progress', False),
                 'total': current['total'], 'item_count': current['item_count']})
         return result
 
@@ -381,7 +383,8 @@ def cancel_draft(identity: int, user=Depends(current_user)):
 def submit(identity: int, data: SubmitBatch | None = None, key: str = Depends(idempotency_key), user=Depends(current_user)):
     with transaction() as db:
         return orders.submit(db, identity, key, user, data.notes if data else None, data.prepaid_label if data else None,
-            data.prepaid_method if data else None, bool(data and 'prepaid_method' in data.model_fields_set))
+            data.prepaid_method if data else None, bool(data and 'prepaid_method' in data.model_fields_set),
+            data.prepaid_amount if data else None, bool(data and 'prepaid_amount' in data.model_fields_set))
 
 
 @router.get('/table-sessions/{identity}/orders')
@@ -409,7 +412,7 @@ def checkout(identity: int, user=Depends(admin)):
             session = orders.active_session(db, identity)
             session.status = 'PAYMENT_PENDING'
             bill = orders.bill(db, identity)
-        customer_display.show_amount(bill['total'])
+        customer_display.show_amount(bill['remaining_amount'])
         return bill
 
 
@@ -427,7 +430,9 @@ def payment(identity: int, data: Pay, key: str = Depends(idempotency_key), user=
         with transaction() as db:
             result = orders.pay(db, identity, data, key, user)
         # Hardware output is best effort and only happens after payment commits.
-        customer_display.show_amount(result['change'] if result['method'] == 'CASH' else result['total'])
+        settlement = result.get('settlement') or {}
+        customer_display.show_amount(result['change'] if settlement.get('additional_method', result['method']) == 'CASH'
+            else settlement.get('additional_collected', result['total']))
         return result
 
 
@@ -439,7 +444,10 @@ def checkout_display(identity: int, data: CustomerDisplayAmount, user=Depends(ad
             bill = orders.bill(db, identity)
             if session.status != 'PAYMENT_PENDING' or bill['total'] != data.expected_total:
                 raise HTTPException(409, 'Bill changed; refresh checkout')
-            if data.final_total > bill['total']:
+            if (bill['prepaid_total'] and data.expected_prepaid_token != bill['prepaid_token']
+                    or data.expected_prepaid_token is not None and data.expected_prepaid_token != bill['prepaid_token']):
+                raise HTTPException(409, 'Paid amount changed; refresh checkout')
+            if data.final_total > bill['remaining_amount']:
                 raise HTTPException(422, 'Display amount exceeds bill total')
         return customer_display.show_amount(data.final_total)
 
@@ -597,9 +605,7 @@ def test_print(user=Depends(admin)):
 
 
 def day_payments(db, day, include_reversed=False):
-    zone = ZoneInfo('Asia/Kuala_Lumpur')
-    start = datetime.combine(day, time.min, zone).astimezone(timezone.utc).isoformat()
-    end = datetime.combine(day + timedelta(days=1), time.min, zone).astimezone(timezone.utc).isoformat()
+    start, end = business_days.bounds(day)
     query = select(Payment).where(Payment.created_at >= start, Payment.created_at < end)
     if not include_reversed:
         query = query.where(~Payment.id.in_(select(PaymentReversal.payment_id)))
@@ -608,7 +614,7 @@ def day_payments(db, day, include_reversed=False):
 
 @router.get('/reports/daily-sales')
 def daily_sales(day: date | None = None, user=Depends(admin)):
-    day = day or datetime.now(ZoneInfo('Asia/Kuala_Lumpur')).date()
+    day = day or business_days.current()
     with transaction() as db:
         payments = day_payments(db, day)
         sessions = [db.get(TableSession, payment.session_id) for payment in payments]
@@ -626,13 +632,15 @@ def daily_sales(day: date | None = None, user=Depends(admin)):
         total = sum(p.total for p in payments)
         original_total = sum(p.original_total if p.original_total is not None else p.total for p in payments)
         return {'date': day.isoformat(), 'timezone': 'Asia/Kuala_Lumpur', 'total': total,
+            'business_day_cutoff': f'{business_days.CUTOFF_HOUR:02d}:00', 'period_start': business_days.bounds(day)[0], 'period_end': business_days.bounds(day)[1],
             'original_sales': original_total, 'discounts': original_total-total,
             'transactions': len(payments), 'completed_sessions': len(payments), 'category_sales': breakdown,
             'average_spending': (total + len(payments) // 2) // len(payments) if payments else 0,
             'dining_duration': {'count': len(durations), 'average_seconds': sum(durations) / len(durations) if durations else None,
                 'minimum_seconds': min(durations) if durations else None, 'maximum_seconds': max(durations) if durations else None},
             'beer_units': beer_units, 'beer_bottles': bottles,
-            'methods': {method: sum(p.total for p in payments if p.method == method) for method in ('CASH', 'QR', 'OTHER')}}
+            'methods': {method: sum((p.settlement['allocations'].get(method, 0) if p.settlement else p.total if p.method == method else 0)
+                for p in payments) for method in ('CASH', 'QR', 'OTHER')}}
 
 
 @router.get('/reports/transactions')

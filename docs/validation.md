@@ -1,5 +1,17 @@
 # Validation Record
 
+## Collected balances, overnight business days and mobile ordering — 2026-11-08
+
+Implemented partial/full paid-first amounts, balance-only final collection, method allocations on receipts/reports, a noon-to-noon Kuala Lumpur reporting day, canned drinks at RM3 without temperature options, smooth category scrolling, inline draft Remove/Edit actions and the shared 下单中 table-card badge.
+
+- Complete backend regression run: **291 passed**, with the existing Starlette/AnyIO dependency deprecation warning. After adding the final pending-item indicator, **47 affected backend cases passed**, including the new shared-draft state test and payment/cancellation/recovery regressions.
+- Latest frontend suite: **50 passed**. TypeScript and production build passed (`index-DnscPZBr.js`, `index-B4kmdkej.css`).
+- A complete browser sweep passed 59 of 63 cases; four failures traced to restoration tests skipping the preserved-draft discard checkbox and cascading into reuse of the uncleared tables. The test now creates that draft explicitly, refreshes before cancellation to respect the change token, waits for checkout and confirms its discard. Checkout also caches the authoritative checkout response before navigation. The latest focused run passed **24 of 24 cases** across 360/390/412 pixels, covering those previously failing cases, pending badges, draft removal layout, paid balance/offer/cash change, full-payment clearing, noon reporting and canned pricing. The restored-draft case also passed an isolated reproduction.
+- The new migrations were rehearsed twice on an isolated SQLite backup. Every historical column/row and printer configuration compared unchanged. The only intended catalog changes are the existing CANNED SKU's RM3 price, removal of its temperature association and cleared verification flag; its old modifier records remain present.
+- Production was stopped after the print queue drained, backed up privately, migrated/seeded twice, checked for integrity/foreign keys, and restarted. A comparison after startup preserved all prior data in all 20 application tables except the stated catalog changes. Counts remained 8 sessions, 9 batches, 20 items, 48 item modifiers, 4 payments, 12 print jobs and 59 audit logs. No live test sales or print jobs were created. Local health, the new API balance fields, served asset hashes and CANNED configuration were verified.
+
+Migration `0012_prepaid_balances` adds nullable paid amounts and final settlement snapshots; old flags are explicitly estimated until reviewed. `0013_canned_fixed_price` changes catalog configuration without rewriting historical order, receipt, payment or ticket snapshots. Daily report query boundaries change without changing stored UTC timestamps. Customer-display tests use an isolated configuration, and printer tests use the mock queue; physical printer/display operation was not tested for this update.
+
 ## Scheduled RM1 drinks and sold-out availability — 2026-11-07
 
 Complete backend suite: **145 passed** (one existing dependency deprecation warning). Frontend: **17 passed**, TypeScript and production build passed. Browser acceptance: **9 passed** at 360/390/412, including independent admin/staff sessions, a cached open picker becoming disabled, and restoration. Fixed a real quick-selection race in the add-item completion callback and added a regression test.

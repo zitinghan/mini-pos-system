@@ -7,6 +7,7 @@ class StrictModel(BaseModel):
 class CustomerDisplayAmount(StrictModel):
     expected_total: int = Field(ge=0)
     final_total: int = Field(ge=0, le=99999999)
+    expected_prepaid_token: str | None = Field(default=None, min_length=64, max_length=64)
 
 class Credentials(StrictModel):
     name: str = Field(min_length=1, max_length=80, pattern=r'^\S(?:.*\S)?$')
@@ -26,6 +27,7 @@ class SubmitBatch(StrictModel):
     notes: str | None = Field(default=None, max_length=500)
     prepaid_label: bool | None = None
     prepaid_method: Literal['CASH', 'QR', 'OTHER'] | None = None
+    prepaid_amount: int | None = Field(default=None, ge=0, le=10000000)
 
 class CancelItem(StrictModel):
     expected_revision: int = Field(ge=1)
@@ -46,6 +48,7 @@ class TableNotes(StrictModel):
 class BatchDetails(TableNotes):
     prepaid_label: bool
     prepaid_method: Literal['CASH', 'QR', 'OTHER'] | None = None
+    prepaid_amount: int | None = Field(default=None, ge=0, le=10000000)
 
 class NewItem(StrictModel):
     menu_item_id: int = Field(gt=0)
@@ -83,13 +86,15 @@ class EditCustomItem(CustomItem):
     expected_revision: int = Field(ge=1)
 
 class Pay(StrictModel):
-    method: Literal['CASH', 'QR', 'OTHER']
-    received: int = Field(ge=0, le=10000000)
+    method: Literal['CASH', 'QR', 'OTHER'] | None = None
+    received: int = Field(default=0, ge=0, le=10000000)
     expected_total: int = Field(ge=0)
     final_total: int | None = Field(default=None, ge=0, le=10000000)
     offer_reason: str = Field(default='', max_length=240)
     discard_drafts: bool = False
     print_receipt: bool = False
+    expected_prepaid_total: int | None = Field(default=None, ge=0)
+    expected_prepaid_token: str | None = Field(default=None, min_length=64, max_length=64)
 
 class PrinterSettings(StrictModel):
     mode: Literal['mock', 'network'] = 'mock'
