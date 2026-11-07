@@ -50,6 +50,28 @@ class EditItem(NewItem):
 class PriceUpdate(StrictModel):
     price: int = Field(ge=0, le=1000000)
 
+class CustomItem(StrictModel):
+    name: str = Field(min_length=1, max_length=120)
+    unit_price: int = Field(ge=0, le=1000000)
+    quantity: int = Field(ge=1, le=99)
+    category_code: Literal['MAINS', 'SNACKS', 'DRINKS', 'BEER']
+    printer_group: Literal['KITCHEN', 'RICE', 'BEVERAGE']
+    takeaway: bool = False
+    notes: str = Field(default='', max_length=240)
+    bottles_per_unit: int = Field(default=0, ge=0, le=99)
+
+    @model_validator(mode='after')
+    def valid_custom_item(self):
+        self.name, self.notes = self.name.strip(), self.notes.strip()
+        if not self.name or any(ord(char) < 32 or ord(char) == 127 for char in self.name):
+            raise ValueError('请输入有效的自定义餐点名称')
+        if (self.category_code == 'BEER') != (self.bottles_per_unit > 0):
+            raise ValueError('啤酒请填写每份瓶数；其他分类的瓶数须为零')
+        return self
+
+class EditCustomItem(CustomItem):
+    expected_revision: int = Field(ge=1)
+
 class Pay(StrictModel):
     method: Literal['CASH', 'QR', 'OTHER']
     received: int = Field(ge=0, le=10000000)
@@ -57,6 +79,7 @@ class Pay(StrictModel):
     final_total: int | None = Field(default=None, ge=0, le=10000000)
     offer_reason: str = Field(default='', max_length=240)
     discard_drafts: bool = False
+    print_receipt: bool = False
 
 class PrinterSettings(StrictModel):
     mode: Literal['mock', 'network'] = 'mock'

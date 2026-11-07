@@ -52,6 +52,8 @@ def ticket_lines(ticket, reprint=False):
             lines.append(('原内容（作废）', 36))
             for item in previous:
                 lines.append((f"{item['quantity']} x {item['name']}", 48))
+                if item.get('description'):
+                    lines.append((f"  {item['description']}", 36))
                 lines.extend((f"  {entry['name']}", 48) for entry in visible_modifiers(item['modifiers']))
                 if item.get('notes'):
                     lines.append((f"备注 {item['notes']}", 36))
@@ -63,6 +65,8 @@ def ticket_lines(ticket, reprint=False):
             if item.get('description'):
                 lines.append((f"  {item['description']}", 36))
             previous_item = next((entry for entry in previous if entry.get('id') == item.get('id')), None)
+            if item.get('is_custom') and previous_item and previous_item.get('takeaway') and not item.get('takeaway'):
+                lines.append(('  堂食', 48))
             for modifier in visible_modifiers(item['modifiers'], previous_item['modifiers'] if previous_item else ()):
                 lines.append((f"  {modifier['name']}", 48))
             if item.get('physical_bottles'):

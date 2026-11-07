@@ -18,6 +18,7 @@ SNACKS = [('FRIED_WANTAN', '炸云吞', '10粒', 700), ('PORK_BALLS', '炸猪肉
             ('BRAISED', '卤味拼盘', '卤肉 + 卤蛋 + 卤豆腐', 1500), ('WANTAN_SOUP', '云吞汤', '10粒', 800)]
 BEERS = [('CARLSBERG', 'Carlsberg', 2200, 6000), ('TIGER', 'Tiger', 2100, 5700), ('GUINNESS', 'Guinness Stout', 2400, 6600)]
 EXTRAS = ['不要青葱', '不要菜', '换成鱼圆', '加咖喱汁']
+CUSTOM_ITEM_SKU = 'CUSTOM_ORDER_ITEM'
 
 
 def seed():
@@ -106,6 +107,8 @@ def seed():
         # Existing products also receive new groups; never overwrite operator edits or submitted snapshots.
         prepared_drinks = {sku for sku, *_ in DRINKS} - {'MINERAL_WATER', 'CANNED'}
         for item in db.scalars(select(MenuItem).order_by(MenuItem.id)):
+            if item.sku == CUSTOM_ITEM_SKU:
+                continue
             ensure_optional_choices(item, '用餐方式', 100, [('堂食', True), ('打包', False)])
             if item.sku == 'WANTAN_MEE':
                 sauce = db.scalar(select(ModifierGroup).join(MenuItemModifierGroup, MenuItemModifierGroup.group_id == ModifierGroup.id)
@@ -127,3 +130,8 @@ def seed():
                     .join(MenuItemModifierGroup, MenuItemModifierGroup.group_id == ModifierGroup.id)
                     .where(MenuItemModifierGroup.item_id == item.id, ModifierGroup.name == '温度', ModifierOption.name == '热 HOT')))
                 ensure_optional_choices(item, '冰量', 95, [('少冰 Less Ice', False), ('去冰 No Ice', False)], hot_ids)
+        # One hidden reference preserves existing order-item foreign keys.
+        # Custom names/prices live in order snapshots, never in the public menu.
+        if db.scalar(select(MenuItem.id).where(MenuItem.sku == CUSTOM_ITEM_SKU)) is None:
+            db.add(MenuItem(sku=CUSTOM_ITEM_SKU, name='自定义餐点（内部）', category_id=categories['MAINS'].id,
+                base_price=0, active=False, display_order=10000))

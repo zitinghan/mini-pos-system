@@ -6,7 +6,7 @@ This guide covers the existing system: 20 tables, separate kitchen/drinks ticket
 
 Install **64-bit Python 3.12** and **Node.js 22.22 or newer supported Node 22/24**, and the manufacturer's Windows driver for your cashier printer. This checkout was tested with Python 3.12.10 and Node 22.22.2 / 24.21.0. Select the Python installer's PATH option. Download runtimes from their official sites: [Python 3.12.10](https://www.python.org/downloads/release/python-31210/) and [Node.js](https://nodejs.org/en/download).
 
-Connect the POS-80C by USB and confirm Windows lists the queue as `POS-80C` (or note its actual name). Use a printer/driver supporting ESC/POS RAW output for automatic thermal receipts. A normal Windows test page verifies the driver/connection; the POS receipt itself also needs a paper test.
+Connect the POS-80C by USB and confirm Windows lists the queue as `POS-80C` (or note its actual name). Use a printer/driver supporting ESC/POS RAW output for thermal receipts. POS cashier printing is off by default: opt in at checkout or print from the saved receipt page. A normal Windows test page verifies the driver/connection; the POS receipt itself also needs a paper test.
 
 Windows must have a CJK font for Chinese printing. Check:
 

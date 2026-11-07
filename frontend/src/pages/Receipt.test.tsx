@@ -19,6 +19,12 @@ const receipt: CustomerReceipt = {
 };
 
 describe('customer receipt', () => {
+  it('offers an explicit print button when the payment did not request paper', () => {
+    data.receipt = { ...receipt, print_job:null, print_history:[] };
+    render(<MemoryRouter><Receipt /></MemoryRouter>);
+    expect(screen.getByRole('button', { name:'打印收据' })).toBeVisible();
+    expect(screen.queryByText('收银收据已建立打印任务。')).not.toBeInTheDocument();
+  });
   it('shows frozen item details, paid total, cash received and change', () => {
     render(<ReceiptPaper receipt={receipt} />);
     expect(screen.getByRole('article', { name: '客户收据' })).toBeVisible();

@@ -1,6 +1,8 @@
 ﻿# Customer receipts and split preparation tickets
 
-Successful payment saves an immutable receipt snapshot and one original cashier print job in the same SQLite transaction as the payment and table release. If saving that queue fails, payment rolls back. If physical printing later fails, payment remains completed and the table remains released; retry is an explicit audited operation. Retrying a payment or reloading its receipt page never creates a second payment or original print.
+Successful payment always saves an immutable receipt snapshot in the same SQLite transaction as payment and table release. **Cashier paper printing is off by default.** Tick 打印收据（默认不打印） at checkout to queue one original cashier job, or use 打印收据 on the receipt page/history later. Reloading, viewing history and retrying a default payment do not queue paper. Stall preparation printing remains automatic and separate.
+
+When checkout explicitly requests paper, its print outbox is atomic with payment; if saving that queue fails, payment rolls back. If physical printing later fails, payment remains completed and the table remains released; retry is an explicit audited operation. Repeated first-print requests return the same original job without another payment or print; deliberate reprints use the existing confirmation flow.
 
 Checkout defaults to QR and uses one final **确认收款并清台** action. The QR verification checkbox and extra confirmation dialog are removed. The button records the operator's payment confirmation; there is no bank integration. Cash still validates the received amount, and stale totals/idempotency checks remain on the server. Draft discard remains explicit.
 

@@ -13,6 +13,7 @@ export default function Checkout() {
   const [method, setMethod] = useState('QR');
   const [received, setReceived] = useState('');
   const [discard, setDiscard] = useState(false);
+  const [printReceipt, setPrintReceipt] = useState(false);
   const [offer, setOffer] = useState<{ original: number; value: string } | null>(null);
   const [offerReason, setOfferReason] = useState('');
   const bill = useQuery({
@@ -36,6 +37,7 @@ export default function Checkout() {
         received: method === 'CASH' ? (sen ?? (finalTotal === 0 ? 0 : null)) : finalTotal,
         expected_total: total,
         discard_drafts: discard,
+        ...(printReceipt ? { print_receipt:true } : {}),
         ...(finalTotal !== total ? { final_total: finalTotal, offer_reason: offerReason.trim() } : {}),
       };
       // An uncertain response retains the same identity after retry or reload.
@@ -109,6 +111,8 @@ export default function Checkout() {
             存在未下单草稿。我确认丢弃本桌全部草稿后收款。
           </label>
         )}
+        <label className="check"><input type="checkbox" checked={printReceipt} disabled={pay.isPending}
+          onChange={(event) => setPrintReceipt(event.target.checked)} />打印收据（默认不打印）</label>
         <button type="button" className="primary" disabled={!!blocked} onClick={() => pay.mutate()}>
           {pay.isPending ? '正在收款…' : '确认收款并清台'}
         </button>

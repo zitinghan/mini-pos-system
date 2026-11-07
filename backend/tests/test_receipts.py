@@ -25,16 +25,16 @@ def submitted(client, headers, sku='WANTAN_MEE'):
     return session, total
 
 
-def paid(client, headers, method='CASH'):
+def paid(client, headers, method='CASH', print_receipt=True):
     session, total = submitted(client, headers)
     result = client.post(f'/api/table-sessions/{session}/payments', headers=key(headers), json={
-        'method': method, 'received': 1000 if method == 'CASH' else total, 'expected_total': total})
+        'method': method, 'received': 1000 if method == 'CASH' else total, 'expected_total': total, 'print_receipt': print_receipt})
     assert result.status_code == 200, result.text
     return result.json()
 
 
 @pytest.mark.parametrize('method', ['CASH', 'QR', 'OTHER'])
-def test_payment_clears_table_and_atomically_saves_receipt_and_print(client, headers, method):
+def test_opt_in_payment_clears_table_and_atomically_saves_receipt_and_print(client, headers, method):
     payment = paid(client, headers, method)
     with transaction() as db:
         assert db.get(TableSession, payment['session_id']).status == 'PAID'
@@ -51,7 +51,7 @@ def test_payment_clears_table_and_atomically_saves_receipt_and_print(client, hea
 def test_payment_retries_and_receipt_refresh_do_not_duplicate_jobs(client, headers):
     session, total = submitted(client, headers)
     request_headers = key(headers)
-    payload = {'method': 'QR', 'received': total, 'expected_total': total}
+    payload = {'method': 'QR', 'received': total, 'expected_total': total, 'print_receipt': True}
     endpoint = f'/api/table-sessions/{session}/payments'
     with ThreadPoolExecutor(max_workers=3) as pool:
         results = list(pool.map(lambda _: client.post(endpoint, headers=request_headers, json=payload), range(3)))
@@ -72,7 +72,7 @@ def test_receipt_print_outbox_failure_rolls_back_payment_and_table_release(clien
     def fail(*args): raise RuntimeError('Injected receipt queue failure')
     monkeypatch.setattr(receipts, 'queue_original', fail)
     with pytest.raises(RuntimeError, match='Injected receipt queue failure'):
-        client.post(f'/api/table-sessions/{session}/payments', headers=key(headers), json={'method': 'QR', 'received': total, 'expected_total': total})
+        client.post(f'/api/table-sessions/{session}/payments', headers=key(headers), json={'method': 'QR', 'received': total, 'expected_total': total, 'print_receipt': True})
     with transaction() as db:
         assert db.scalar(select(func.count()).select_from(Payment)) == 0
         assert db.scalar(select(func.count()).select_from(Receipt)) == 0
@@ -105,6 +105,32 @@ def test_legacy_payment_receipt_is_read_only_until_explicit_print(client, header
     assert response.status_code == 201
     second = client.post(endpoint + '/print', headers=key(headers))
     assert second.json()['id'] == response.json()['id']
+
+
+def test_default_payment_saves_immutable_receipt_without_printing_until_requested(client, headers):
+    session, total = submitted(client, headers)
+    body = {'method': 'QR', 'received': total, 'expected_total': total}
+    request = key(headers)
+    endpoint = f'/api/table-sessions/{session}/payments'
+    payment = client.post(endpoint, headers=request, json=body).json()
+    assert client.post(endpoint, headers=request, json=body).json() == payment
+    url = f"/api/payments/{payment['id']}/receipt"
+    before = client.get(url, headers=headers).json()
+    assert before['print_job'] is None and before['print_history'] == []
+    assert client.get('/api/tables/5', headers=headers).json()['status'] == 'AVAILABLE'
+    with transaction() as db:
+        assert db.scalar(select(func.count()).select_from(Receipt)) == 1
+        assert db.scalar(select(func.count()).select_from(PrintJob).where(PrintJob.payment_id == payment['id'])) == 0
+        db.get(MenuItem, 1).name = 'New name'
+        db.get(MenuItem, 1).base_price = 2000
+    assert client.get(url, headers=headers).json()['items'] == before['items']
+    first = client.post(url + '/print', headers=key(headers))
+    second = client.post(url + '/print', headers=key(headers))
+    assert first.status_code == second.status_code == 201 and first.json()['id'] == second.json()['id']
+    with transaction() as db:
+        assert db.scalar(select(func.count()).select_from(Payment)) == 1
+        assert db.scalar(select(func.count()).select_from(Receipt)) == 1
+        assert db.scalar(select(func.count()).select_from(PrintJob).where(PrintJob.payment_id == payment['id'])) == 1
 
 
 def test_staff_cannot_read_customer_receipts_or_their_print_previews(client, headers):

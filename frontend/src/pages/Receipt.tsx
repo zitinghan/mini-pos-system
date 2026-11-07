@@ -65,7 +65,7 @@ export default function Receipt() {
   const paperWidth = `${data.paper_mm ?? (data.paper_width >= 500 ? 80 : 58)}mm`;
   return <section className="customer-receipt" style={{ '--receipt-width': paperWidth } as CSSProperties}>
     <style>{`@media print { @page { size: ${paperWidth} auto; margin: 3mm; } }`}</style>
-    <div className="no-print"><h1>付款收据</h1><p className="notice">收款已完成，桌台已释放。{job ? '收银收据已建立打印任务。' : '可查看或打印这笔历史交易的收据。'}</p>
+    <div className="no-print"><h1>付款收据</h1><p className="notice">收款已完成，桌台已释放。{job ? '收银收据已建立打印任务。' : '可查看收据，需要纸本时再打印。'}</p>
       <div className="receipt-actions"><Link className="back" to="/">← 返回桌台</Link><button onClick={() => window.print()}>浏览器打印 / 保存 PDF</button></div>
       <div className="card stack"><h2>收银打印状态</h2>
         {job ? <><span className={`print-status ${job.status}`}>{label(job.status)}</span>
@@ -74,7 +74,7 @@ export default function Receipt() {
           {job.error && <p className="error">{job.error}</p>}
           {job.preview && <button onClick={() => { previewJob(job.id).then(setImage).catch(setError); }}>查看收据打印预览</button>}
           {!waiting && <ConfirmButton disabled={retry.isPending} onConfirm={() => retry.mutate()}>核实后重印收据</ConfirmButton>}
-        </> : <button disabled={send.isPending} onClick={() => send.mutate()}>发送到收银打印机</button>}
+        </> : <button disabled={send.isPending} onClick={() => send.mutate()}>打印收据</button>}
         <ErrorBox error={receipt.error || send.error || retry.error || error} />
       </div>
     </div>

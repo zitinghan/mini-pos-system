@@ -17,6 +17,8 @@ from app.services import order_edits
 from app.services import table_controls
 from app.services import table_attention
 from app.services import sales
+from app.services import custom_items
+from app.schemas.requests import CustomItem, EditCustomItem
 from app.printing.jobs import job_data
 from app.printing.stations import STATIONS
 
@@ -304,6 +306,18 @@ def add_item(identity: int, data: NewItem, key: str = Depends(idempotency_key), 
         db.add(AuditLog(user_id=user['id'], action='ADD_ITEM', request_key=key, details={**details, 'item_id': item.id}))
         db.flush()
         return orders.item_data(db, item)
+
+
+@router.post('/order-batches/{identity}/custom-items', status_code=201)
+def add_custom_item(identity: int, data: CustomItem, key: str = Depends(idempotency_key), user=Depends(current_user)):
+    with transaction() as db:
+        return custom_items.add(db, identity, data, key, user)
+
+
+@router.patch('/order-batches/{identity}/custom-items/{item_id}')
+def edit_custom_item(identity: int, item_id: int, data: EditCustomItem, key: str = Depends(idempotency_key), user=Depends(current_user)):
+    with transaction() as db:
+        return custom_items.edit(db, identity, item_id, data, key, user)
 
 
 @router.delete('/order-batches/{identity}/items/{item_id}')

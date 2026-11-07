@@ -25,7 +25,7 @@ def test_offer_records_actual_payment_without_changing_food_and_reconciles_repor
     before = client.get(f'/api/table-sessions/{session}/bill', headers=headers).json()['items']
     request = key(headers)
     body = {'method': method, 'received': 5000 if method == 'CASH' else 3999,
-        'expected_total': 4100, 'final_total': 3999, 'offer_reason': '熟客优惠'}
+        'expected_total': 4100, 'final_total': 3999, 'offer_reason': '熟客优惠', 'print_receipt': True}
     response = client.post(endpoint, headers=request, json=body)
     assert response.status_code == 200, response.text
     payment = response.json()

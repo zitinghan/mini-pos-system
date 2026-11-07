@@ -25,13 +25,15 @@ Every item has 堂食 / 打包 at the top of its options; choose 打包 for take
 
 Order/bill lines and new thermal receipts omit the free neutral labels 不加蛋、普通、堂食. The choices stay selected in the editor and stored in history; prices are unchanged. Actual additions and preparation instructions (加蛋、加面、大份、打包、酱汁、辣度、汤/干、冷热 and drink adjustments) remain visible. Correction tickets explicitly show a neutral choice when it reverses an earlier instruction, such as 加蛋→不加蛋 or 打包→堂食. Old rendered preview images are retained as the original print record.
 
+For something outside the menu, use ＋ 自定义餐点 / 价格 below the item list. Enter name, unit price in RM, quantity, category and preparation stall; takeaway and item remarks are available. It joins the current draft and is sent only when you confirm the order. Custom dishes are not added to the fixed menu. Before payment, use 修改 to change their name/price/quantity/notes. Submitted category/stall stay fixed; cancel and re-add to change the destination. Custom beer also asks for bottles per unit/package.
+
 ## Cashier checkout
 
 1. Open the table and tap 查看账单 / 收款.
 2. Verify every submitted item and 应收总额. For an offer, enter 优惠后总价 (RM) directly (RM0 up to the original total, at most two decimal places). An optional 优惠备注 explains the offer; 恢复原价 removes it. If another device changes the bill total, the input returns to the current original total for review.
 3. 二维码 is selected by default. Verify funds yourself, or choose 现金 or 其他. For cash, enter ringgit, such as `50.00`; the app shows change and rejects insufficient amounts.
 4. If drafts remain, go back to submit them or explicitly acknowledge discarding all table drafts.
-5. Tap 确认收款并清台 once. The table becomes available, its cashier receipt is queued and the receipt page opens. The completed transaction remains in 营业记录.
+5. Paper receipts are off by default. Tick 打印收据（默认不打印） only if the customer wants one. Tap 确认收款并清台 once: the table becomes available and the saved receipt page opens. You can use 打印收据 there or from 营业记录 later. Viewing/reloading does not print.
 
 Food prices and kitchen tickets retain the original amounts. Customer receipts and transaction history show original total, offer and final payment. Daily sales/cash/QR totals use actual payment; category revenue shares the offer proportionally, rounded in integer sen so categories sum exactly to actual sales. 优惠前金额 and 优惠合计 are shown separately. Only cashiers/admins can record an offer; completed payments remain locked.
 

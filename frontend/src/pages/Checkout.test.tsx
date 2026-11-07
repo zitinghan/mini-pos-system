@@ -16,6 +16,7 @@ describe('single-step QR checkout', () => {
     render(<View />);
     expect(screen.getByRole('button', { name: /^二维码$/ })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.queryByRole('checkbox', { name: /人工核实/ })).not.toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name:'打印收据（默认不打印）' })).not.toBeChecked();
     fireEvent.click(screen.getByRole('button', { name: '确认收款并清台' }));
     expect(state.mutate).toHaveBeenCalledOnce();
     expect(screen.queryByRole('button', { name: /^确认$/ })).not.toBeInTheDocument();

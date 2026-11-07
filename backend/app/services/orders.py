@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from app.services.pricing import SelectionGroup, PriceValidationError, calculate_price
 from app.services import promotions
+from app.database.seed import CUSTOM_ITEM_SKU
 from app.printing.stations import STATIONS
 from app.models.entities import (MenuItem, MenuCategory, ModifierGroup, ModifierOption, MenuItemModifierGroup,
     TableSession, RestaurantTable, OrderBatch, OrderItem, OrderItemModifier, PrintJob, Payment, AuditLog, now)
@@ -28,6 +29,8 @@ def menu(db):
     campaigns = promotions.active_promotions(db)
     for item in db.scalars(select(MenuItem).join(MenuCategory, MenuItem.category_id == MenuCategory.id)
             .where(MenuItem.active == True).order_by(MenuCategory.display_order, MenuItem.display_order, MenuItem.id)):
+        if item.sku == CUSTOM_ITEM_SKU:
+            continue
         promotion = promotions.for_sku(campaigns, item.sku)
         category = db.get(MenuCategory, item.category_id)
         groups = list(db.scalars(select(ModifierGroup).join(MenuItemModifierGroup, MenuItemModifierGroup.group_id == ModifierGroup.id).where(MenuItemModifierGroup.item_id == item.id).order_by(ModifierGroup.display_order)))
@@ -49,6 +52,8 @@ def menu(db):
 
 def price_item(db, item_id, quantity, option_ids, *, campaigns=None, allow_unavailable=False):
     item = require(db, MenuItem, item_id)
+    if item.sku == CUSTOM_ITEM_SKU:
+        raise HTTPException(422, '请使用自定义餐点入口')
     if not item.active and not allow_unavailable:
         raise HTTPException(422, 'Item is unavailable')
     if item.sold_out and not allow_unavailable:
@@ -105,6 +110,7 @@ def snapshot_item(db, item, source, options):
 def item_data(db, item):
     return {'id': item.id, 'name': item.name, 'quantity': item.quantity, 'base_price': item.base_price,
         'menu_item_id': item.menu_item_id,
+        'is_custom': item.sku == CUSTOM_ITEM_SKU, 'takeaway': item.sku == CUSTOM_ITEM_SKU and item.description == '打包',
         'unit_price': item.unit_price, 'line_total': item.line_total, 'status': item.status,
         'sku': item.sku, 'category_code': item.category_code, 'printer_group': item.printer_group,
         'description': item.description, 'variant_name': item.variant_name, 'bottles_per_unit': item.bottles_per_unit,
@@ -179,6 +185,11 @@ def submit(db, identity, key, user, notes=None, prepaid_label=None):
     # Revalidate current menu and snapshot final authoritative prices at submission.
     campaigns = promotions.active_promotions(db)
     for item in items:
+        if item.sku == CUSTOM_ITEM_SKU:
+            from app.services.custom_items import validate_snapshot
+            validate_snapshot(db, item)
+            item.line_total, item.status = item.unit_price * item.quantity, 'SUBMITTED'
+            continue
         modifiers = list(db.scalars(select(OrderItemModifier).where(OrderItemModifier.item_id == item.id)))
         source, options, unit = price_item(db, item.menu_item_id, item.quantity, [m.option_id for m in modifiers], campaigns=campaigns)
         item.name, item.base_price, item.unit_price = source.name, source.base_price, unit
@@ -225,6 +236,7 @@ def pay(db, session_id, data, key, user):
     # Keep pre-upgrade retry identities valid when no offer was requested.
     if details['final_total'] is None: details.pop('final_total')
     if not details['offer_reason']: details.pop('offer_reason')
+    if not details['print_receipt']: details.pop('print_receipt')
     fingerprint = hashlib.sha256(json.dumps({'session_id': session_id, **details}, sort_keys=True).encode()).hexdigest()
     previous = db.scalar(select(Payment).where(Payment.idempotency_key == key))
     if previous:
@@ -258,11 +270,14 @@ def pay(db, session_id, data, key, user):
     payment.created_at = timestamp
     session.status, session.closed_at, session.paid_at = 'PAID', timestamp, timestamp
     db.add(AuditLog(user_id=user['id'], action='PAYMENT', details={'session_id': session_id, 'method': data.method,
-        'original_total': current['total'], 'total': total, 'discount': current['total']-total, 'offer_reason': payment.offer_reason}))
+        'original_total': current['total'], 'total': total, 'discount': current['total']-total, 'offer_reason': payment.offer_reason,
+        'print_receipt': data.print_receipt}))
     db.flush()
-    # Receipt and print outbox commit with payment, never after a successful response.
-    from app.services.receipts import queue_original
-    queue_original(db, payment)
+    # Always freeze the receipt; only enqueue paper output when explicitly requested.
+    from app.services.receipts import saved, queue_original
+    saved(db, payment, create=True)
+    if data.print_receipt:
+        queue_original(db, payment)
     return payment_data(payment)
 
 

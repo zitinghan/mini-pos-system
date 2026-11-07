@@ -16,7 +16,7 @@ def test_orders_completion_follows_paid_session_and_keeps_table_snapshot(client,
     assert client.get('/api/print-jobs?completed=true', headers=headers).json() == []
 
     payment = client.post(f'/api/table-sessions/{session}/payments', headers=key(headers),
-        json={'method': 'QR', 'received': total, 'expected_total': total})
+        json={'method': 'QR', 'received': total, 'expected_total': total, 'print_receipt': True})
     assert payment.status_code == 200
     assert client.get('/api/print-jobs?completed=false', headers=headers).json() == []
     completed = client.get('/api/print-jobs?completed=true', headers=headers).json()

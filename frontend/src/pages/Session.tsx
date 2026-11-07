@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, requestKey, clearKey } from '../services/api';
-import type { MenuItem, Batch, Bill, CategoryCode, Line } from '../services/types';
+import type { MenuItem, Batch, Bill, CategoryCode, Line, CustomItemInput } from '../services/types';
+import CustomItemForm from '../components/CustomItemForm';
 import { useAuth } from '../stores/auth';
 import { useUI } from '../stores/ui';
 import { money } from '../utils/format';
@@ -125,6 +126,8 @@ export default function Session() {
   const user = useAuth((state) => state.user);
   const [chosen, setChosen] = useState<MenuItem | null>(null);
   const optionsRef = useRef<HTMLDivElement>(null);
+  const customRef = useRef<HTMLDivElement>(null);
+  const [customOpen, setCustomOpen] = useState(false);
   const [category, setCategory] = useState<CategoryCode>('MAINS');
   const [error, setError] = useState<unknown>(null);
   const [editing, setEditing] = useState<{ line: Line; batchId: number } | null>(null);
@@ -218,7 +221,31 @@ export default function Session() {
       useUI.getState().setNotice(result.change_print_job_id ? '餐点已修改，更改单已送入对应档口打印队列。' : '草稿修改已保存。');
     },
   });
-  const startEdit = (line: Line, batchId: number) => { edit.reset(); setEditing({ line, batchId }); };
+  const saveCustom = useMutation({
+    mutationFn: async (value: CustomItemInput) => {
+      if (!editing) throw new Error('请选择要修改的餐点');
+      const payload = { ...value, expected_revision: editing.line.revision ?? 1 };
+      const scope = `custom-edit:${editing.batchId}:${editing.line.id}:${JSON.stringify(payload)}`;
+      const result = await api<Line & {change_print_job_id?:number}>(`/order-batches/${editing.batchId}/custom-items/${editing.line.id}`,
+        'PATCH', payload, requestKey(scope));
+      clearKey(scope); return result;
+    },
+    onSuccess: (result) => {
+      setEditing(null); refresh(); void client.invalidateQueries({ queryKey: ['print-jobs'] });
+      useUI.getState().setNotice(result.change_print_job_id ? '自定义餐点已修改，更改单已送至对应档口。' : '自定义草稿已修改。');
+    },
+  });
+  const startEdit = (line: Line, batchId: number) => { edit.reset(); saveCustom.reset(); setEditing({ line, batchId }); };
+
+  const addCustom = useMutation({
+    mutationFn: async (value: CustomItemInput) => {
+      const batch = ownDraft ?? await api<{ id:number }>('/order-batches', 'POST', { session_id:Number(id) });
+      const scope = `custom-add:${batch.id}:${JSON.stringify(value)}`;
+      const result = await api<Line>(`/order-batches/${batch.id}/custom-items`, 'POST', value, requestKey(scope));
+      clearKey(scope); return result;
+    },
+    onSuccess: () => { setCustomOpen(false); setError(null); refresh(); },
+  });
 
   const add = useMutation({
     mutationFn: async ({ quantity, ids, notes = '' }: { quantity: number; ids: number[]; notes?: string }) => {
@@ -295,6 +322,7 @@ export default function Session() {
   useEffect(() => {
     if (chosen) optionsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
   }, [chosen]);
+  useEffect(() => { if (customOpen) customRef.current?.scrollIntoView?.({ behavior:'smooth', block:'start' }); }, [customOpen]);
 
   if (bill.isPending || batches.isPending || menu.isPending) {
     return <><Loading /><ErrorBox error={bill.error || batches.error || menu.error} /></>;
@@ -309,7 +337,7 @@ export default function Session() {
         <div><p className="eyebrow">{bill.data?.first_order_at || bill.data?.item_count ? label(bill.data?.status ?? '') : '尚未下单'}</p><h1>{bill.data?.table} 点餐</h1></div>
         <strong>{money(bill.data?.total ?? 0)}</strong>
       </div>
-      <ErrorBox error={error || bill.error || batches.error || menu.error || (!editing && edit.error)} />
+      <ErrorBox error={error || bill.error || batches.error || menu.error || (!editing && (edit.error || saveCustom.error))} />
       {bill.data?.status === 'PAYMENT_PENDING' && (
         <div className="notice" role="status">
           <p>此桌正在结账。需要加单时，请收银员恢复点餐。</p>
@@ -336,11 +364,16 @@ export default function Session() {
           <ItemPicker key={currentChosen.id} item={currentChosen} busy={add.isPending}
             onAdd={(quantity, ids, notes) => add.mutate({ quantity, ids, notes })} />
         </div>}
+        <div ref={customRef} style={{ scrollMarginTop:16 }}>
+          {customOpen ? <><ErrorBox error={addCustom.error} />
+            <CustomItemForm category={category} busy={addCustom.isPending} onSave={(value) => addCustom.mutate(value)} onClose={() => setCustomOpen(false)} /></>
+            : <button className="custom-item-add" onClick={() => { addCustom.reset(); setCustomOpen(true); }}>＋ 自定义餐点 / 价格</button>}
+        </div>
       </>}
       {ownDraft && (
         <section className="card stack">
           <div className="row spread"><h2>当前草稿</h2><span className="pill">未送厨房</span></div>
-          <Lines items={drafts} onEdit={active && !edit.isPending ? (line) => startEdit(line, ownDraft.id) : undefined} />
+          <Lines items={drafts} onEdit={active && !edit.isPending && !saveCustom.isPending ? (line) => startEdit(line, ownDraft.id) : undefined} />
           {drafts.map((item) => (
             <button key={item.id} className="quiet" disabled={remove.isPending}
               onClick={() => remove.mutate(item.id)}>移除 {item.quantity} × {item.name}</button>
@@ -353,7 +386,7 @@ export default function Session() {
           <small>只作订单提示，不登记收款或自动清台；下一轮默认不标记。</small>
           <small>价格以确认下单时菜单为准。</small>
           {unavailableDrafts.length > 0 && <p className="warning" role="alert">{unavailableDrafts.map((item) => item.name).join('、')} 已售罄，请先移除或等待恢复供应。</p>}
-          <button className="primary" disabled={!active || !drafts.length || unavailableDrafts.length > 0 || submit.isPending || add.isPending || edit.isPending || cancelOrder.isPending || saveTableNotes.isPending}
+          <button className="primary" disabled={!active || !drafts.length || unavailableDrafts.length > 0 || submit.isPending || add.isPending || addCustom.isPending || saveCustom.isPending || edit.isPending || cancelOrder.isPending || saveTableNotes.isPending}
             onClick={() => submit.mutate()}>
             {submit.isPending ? '正在确认…' : '确认下单 / 送档口'}
           </button>
@@ -370,15 +403,15 @@ export default function Session() {
             {active && batch.status === 'SUBMITTED' && <button className="quiet" onClick={() => {
               saveRoundDetails.reset(); setRoundDetails(batch); setRoundNotes(batch.notes ?? ''); setRoundPaid(batch.prepaid_label ?? false);
             }}>修改本轮备注 / 付款标记</button>}
-            <Lines items={batch.items} onEdit={active && batch.status === 'SUBMITTED' && !edit.isPending && !cancelOrder.isPending ? (line) => startEdit(line, batch.id) : undefined}
-              onCancel={active && batch.status === 'SUBMITTED' && !edit.isPending && !cancelOrder.isPending ? (line) => startCancelItem(line, batch.id) : undefined} />
+            <Lines items={batch.items} onEdit={active && batch.status === 'SUBMITTED' && !edit.isPending && !saveCustom.isPending && !cancelOrder.isPending ? (line) => startEdit(line, batch.id) : undefined}
+              onCancel={active && batch.status === 'SUBMITTED' && !edit.isPending && !saveCustom.isPending && !cancelOrder.isPending ? (line) => startCancelItem(line, batch.id) : undefined} />
           </div>
         ))}
         {!bill.data?.items.length && <p className="muted">尚未确认任何菜品。</p>}
         <div className="row spread"><h2>合计</h2><h2>{money(bill.data?.total ?? 0)}</h2></div>
-        {cashier && <button className="primary" disabled={checkout.isPending || edit.isPending || cancelOrder.isPending || saveRoundDetails.isPending || saveTableNotes.isPending || !bill.data?.item_count}
+        {cashier && <button className="primary" disabled={checkout.isPending || edit.isPending || saveCustom.isPending || addCustom.isPending || cancelOrder.isPending || saveRoundDetails.isPending || saveTableNotes.isPending || !bill.data?.item_count}
           onClick={() => checkout.mutate()}>查看账单 / 收款</button>}
-        {active && bill.data?.change_token && <button className="quiet" disabled={cancelOrder.isPending || edit.isPending || add.isPending || submit.isPending}
+        {active && bill.data?.change_token && <button className="quiet" disabled={cancelOrder.isPending || edit.isPending || saveCustom.isPending || addCustom.isPending || add.isPending || submit.isPending}
           onClick={() => { cancelOrder.reset(); setCancelReason('顾客取消'); setCancelTarget({kind:'TABLE',bill:bill.data}); }}>取消整桌</button>}
         {cashier && !bill.data?.item_count && !bill.data?.change_token && (
           <ConfirmButton disabled={closeEmpty.isPending} onConfirm={() => closeEmpty.mutate()}>
@@ -403,9 +436,11 @@ export default function Session() {
       {editing && <div className="modal" role="dialog" aria-modal="true" aria-label="修改餐点"
         onClick={(event) => { if (event.target === event.currentTarget) setEditing(null); }}>
         <div className="stack"><button onClick={() => setEditing(null)}>关闭编辑</button>
-          <ErrorBox error={edit.error} />
+          <ErrorBox error={editing.line.is_custom ? saveCustom.error : edit.error} />
           {editing.line.status === 'SUBMITTED' && <p className="notice">保存后会出更改单，请通知对应档口按新内容准备。</p>}
-          {editingMenu ? <ItemPicker key={`${editing.line.id}:${editing.line.revision}`} initial={editing.line}
+          {editing.line.is_custom ? <CustomItemForm key={`${editing.line.id}:${editing.line.revision}`} initial={editing.line}
+            category={editing.line.category_code ?? 'MAINS'} busy={saveCustom.isPending} onSave={(value) => saveCustom.mutate(value)} />
+            : editingMenu ? <ItemPicker key={`${editing.line.id}:${editing.line.revision}`} initial={editing.line}
             item={editing.line.status === 'SUBMITTED' ? { ...editingMenu, sold_out: false } : editingMenu} busy={edit.isPending}
             onAdd={(quantity, ids, notes, unitPrice) => edit.mutate({ quantity, ids, notes, unitPrice })} />
             : <p className="error">菜品已停售，当前无法修改。</p>}

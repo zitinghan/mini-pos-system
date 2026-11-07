@@ -6,6 +6,7 @@ from sqlalchemy import select
 from app.models.entities import (OrderBatch, OrderItem, OrderItemModifier, ModifierOption,
     MenuItemModifierGroup, MenuItem, PrintJob, AuditLog, RestaurantTable, now)
 from app.services import orders
+from app.database.seed import CUSTOM_ITEM_SKU
 
 
 def priced_selection_unchanged(db, before, selected):
@@ -35,6 +36,8 @@ def edit(db, batch_id, item_id, data, key, user):
     item = orders.require(db, OrderItem, item_id)
     if item.batch_id != batch_id:
         raise HTTPException(404, 'Item not in this batch')
+    if item.sku == CUSTOM_ITEM_SKU:
+        raise HTTPException(422, '请使用自定义餐点编辑入口')
     if item.status != batch.status or batch.status not in ('DRAFT', 'SUBMITTED'):
         raise HTTPException(409, 'Item cannot be edited')
     if batch.status == 'DRAFT':
@@ -86,6 +89,10 @@ def edit(db, batch_id, item_id, data, key, user):
         item.revision += 1
         db.flush()
     after = orders.item_data(db, item)
+    return record_change(db, batch, session, before, after, changed, fingerprint, key, user)
+
+
+def record_change(db, batch, session, before, after, changed, fingerprint, key, user):
     audit = AuditLog(user_id=user['id'], action='EDIT_ITEM', request_key=key,
         details={'fingerprint': fingerprint, 'before': before, 'after': after, 'result': after})
     db.add(audit)

@@ -40,9 +40,17 @@ At cashier checkout, the screen reminds staff to check previously collected fund
 
 ## Data upgrade
 
+Custom ordering uses one inactive internal SKU, `CUSTOM_ORDER_ITEM`, to preserve existing order-item foreign keys. It is excluded from the menu and standard menu-item ordering; each custom order snapshots its own name, integer-sen unit price, quantity, category, stall, takeaway/notes and optional beer bottle count. Names and prices are never written as new public menu products. The seed adds this internal reference once, without schema changes or altering production records/prices.
+
+`POST /order-batches/{id}/custom-items` requires a draft owner/admin and an idempotency key; retries cannot create duplicate items. All staff may edit submitted unpaid custom items using the custom PATCH endpoint and expected revision. Category/stall are fixed after submission to avoid misdirecting existing preparation; cancel/re-add to move a dish. Corrections show the old and new names/notes/takeaway instructions, and original tickets remain immutable. Checkout/paid locks, cancellation, mixed-category reports, cashier offers and manual receipt printing apply to custom rows.
+
+Cashier receipts now default to **no paper**. The payment transaction still saves its immutable receipt; `print_receipt=true` opts in to one original print job, or the cashier may request that same original later from the receipt page/history. Viewing/reloading and replaying a default payment create no print job. Existing preparation tickets continue to queue on submission. No pending or historical printer jobs are deleted by this preference change.
+
 Migration `0007_table_controls` adds table remarks/revisions, round paid-label/revision fields, cancellation reasons and session links on print jobs. Old print-job session links are backfilled from their batch/payment, without changing original payloads, delivery status or amounts. Idempotent seeding adds only missing 面粉粿 portions and canned brand choices. Existing menu prices, stock, promotions, paid history and printer configuration are preserved.
 
 ## Verification
+
+Custom items and optional cashier printing: **231 backend tests passed**, **38 frontend tests passed**, and the production build passed. Across 360/390/412-pixel Android screens, 12 focused browser cases were verified (11 passed in the main run; the remaining cash-receipt preview case passed after its test explicitly opted in to paper printing). Checks cover manual prices/quantities, stall routing, edits/cancellations, immutable receipts, default no-paper checkout, late first printing, opt-in printing, and original checkout/remark workflows. Repeated seed/upgrade on a database copy preserved every original table/record/settings field and added only one inactive catalog reference. No schema migration is needed for this update.
 
 The table-attention/cashier-offer update was verified on 2026-11-07 with all 224 backend cases (218 passed in the full run; 6 passed on recheck after updating migration/menu-count assertions and explicit UTF-8 test-file reads), 34 frontend tests and a production build. Twelve focused browser checks passed across Android widths 360/390/412, covering alerts, acknowledgement after reload, bottom-positioned remarks, the new snack, cashier offers, normal checkout and editable/cancelled orders. Three additional alert checks passed after shortening the mobile acknowledgement text. A twice-run migration/seed on a copy preserved every original record/settings field and added only the new snack configuration.
 

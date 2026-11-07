@@ -112,7 +112,7 @@ export default function Settings() {
         <label className="check"><input type="checkbox" checked={form.cutter} onChange={(event) => change('cutter', event.target.checked)} />兼容自动切纸器</label>
       </div></details>
       <h2>收银收据打印机（独立）</h2>
-      <small>成功收款并清台后自动打印整桌收据，不发送到厨房打印机。中文使用图片输出。</small>
+      <small>默认不打印收据。结账时勾选打印，或付款后在收据页点击「打印收据」。收银与厨房使用独立打印机。</small>
       <label>收据连接模式<select value={form.receipt_mode ?? 'mock'} onChange={(event) => change('receipt_mode', event.target.value as Printer['receipt_mode'])}>
         <option value="mock">只生成预览（不打印）</option><option value="windows">Windows USB 热敏打印机</option><option value="network">收银网络打印机</option>
       </select></label>
