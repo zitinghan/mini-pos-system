@@ -5,6 +5,8 @@ from app.core.config import FONT_PATH
 
 
 def ticket_lines(ticket, reprint=False):
+    if ticket.get('kind') == 'RECEIPT':
+        return receipt_lines(ticket, reprint)
     lines = []
     if reprint:
         lines.append(('REPRINT / 重印', 25))
@@ -36,6 +38,36 @@ def ticket_lines(ticket, reprint=False):
             if item.get('notes'):
                 lines.append((f"备注 {item['notes']}", 36))
     lines.extend([('========================', 20), (f'共 {total} 份', 30)])
+    return lines
+
+
+def receipt_lines(receipt, reprint=False):
+    def money(sen):
+        return f'RM {sen // 100}.{sen % 100:02d}'
+
+    lines = [('REPRINT / 重印', 25)] if reprint else []
+    lines.extend([(receipt['restaurant'], 32), (receipt.get('english_name', 'KE KE / KOPITIAM'), 20),
+        ('收据 / RECEIPT', 30), (f"桌号 {receipt['table']}", 40),
+        (f"收据 #{receipt['receipt_number']}", 24)])
+    local = datetime.fromisoformat(receipt['time']).astimezone(ZoneInfo('Asia/Kuala_Lumpur'))
+    lines.append((local.strftime('%Y-%m-%d %H:%M'), 22))
+    if receipt.get('cashier'):
+        lines.append((f"收银 {receipt['cashier']}", 22))
+    for item in receipt['items']:
+        lines.extend([('------------------------', 20), (f"{item['quantity']} x {item['name']}", 40)])
+        for modifier in item['modifiers']:
+            lines.append((f"  {modifier['name']}", 32))
+        if item.get('description'):
+            lines.append((item['description'], 26))
+        if item.get('physical_bottles'):
+            lines.append((f"共 {item['physical_bottles']} 瓶", 26))
+        if item.get('notes'):
+            lines.append((f"备注 {item['notes']}", 26))
+        lines.append((f"{item['quantity']} x {money(item['unit_price'])} = {money(item['line_total'])}", 24))
+    method = {'CASH': '现金 CASH', 'QR': '二维码 QR', 'OTHER': '其他 OTHER'}.get(receipt['method'], receipt['method'])
+    lines.extend([('========================', 20), (f"合计 {money(receipt['total'])}", 36),
+        (method, 26), (f"实收 {money(receipt['received'])}", 28), (f"找零 {money(receipt['change'])}", 28),
+        ('谢谢光临 / THANK YOU', 22)])
     return lines
 
 

@@ -49,6 +49,14 @@ class PrinterSettings(StrictModel):
     kitchen_port: int = Field(default=9100, ge=1, le=65535)
     beverage_host: str = Field(default='', max_length=253)
     beverage_port: int = Field(default=9100, ge=1, le=65535)
+    receipt_mode: Literal['mock', 'network', 'windows'] = 'mock'
+    receipt_host: str = Field(default='', max_length=253)
+    receipt_port: int = Field(default=9100, ge=1, le=65535)
+    receipt_printer_name: str = Field(default='', max_length=200)
+    receipt_width: int = Field(default=384, ge=192, le=576)
+    receipt_paper_mm: Literal[55, 58, 80] = 58
+    receipt_cutter: bool = False
+    receipt_simulation: Literal['success', 'connection_failure', 'timeout', 'uncertain'] = 'success'
 
 class OptionConfiguration(StrictModel):
     enabled: bool

@@ -157,7 +157,7 @@ export default function Session() {
     mutationFn: async () => {
       if (!ownDraft) throw new Error('草稿不存在');
       const scope = `submit:${ownDraft.id}`;
-      const result = await api<{ batch_id: number; print_job_id: number }>(
+      const result = await api<{ batch_id: number; print_job_id: number; print_jobs?: {id:number;routing_group:string}[] }>(
         `/order-batches/${ownDraft.id}/submit`, 'POST', undefined, requestKey(scope),
       );
       clearKey(scope);
@@ -166,7 +166,7 @@ export default function Session() {
     onSuccess: (result) => {
       refresh();
       useUI.getState().setNotice(
-        `订单 #${result.batch_id} 已保存；厨房打印任务 #${result.print_job_id} 已排队。请在订单页查看发送状态。`,
+        `订单 #${result.batch_id} 已保存；${result.print_jobs?.length ?? 1} 张制作单已排队，请在订单页查看厨房 / 饮料发送状态。`,
       );
       navigate('/');
     },
@@ -253,7 +253,7 @@ export default function Session() {
           {unavailableDrafts.length > 0 && <p className="warning" role="alert">{unavailableDrafts.map((item) => item.name).join('、')} 已售罄，请先移除或等待恢复供应。</p>}
           <button className="primary" disabled={!active || !drafts.length || unavailableDrafts.length > 0 || submit.isPending || add.isPending}
             onClick={() => submit.mutate()}>
-            {submit.isPending ? '正在确认…' : '确认下单 / 送厨房'}
+            {submit.isPending ? '正在确认…' : '确认下单 / 送档口'}
           </button>
           <ConfirmButton disabled={discard.isPending} onConfirm={() => discard.mutate()}>丢弃此草稿</ConfirmButton>
         </section>

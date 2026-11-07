@@ -166,9 +166,17 @@ class PrinterConfiguration(Record, Base):
     __tablename__ = 'printer_configurations'
     config: Mapped[dict] = mapped_column(JSON)
 
+
+class Receipt(Record, Base):
+    __tablename__ = 'receipts'
+    payment_id: Mapped[int] = mapped_column(ForeignKey('payments.id'), unique=True)
+    snapshot: Mapped[dict] = mapped_column(JSON)
+
 class PrintJob(Record, Base):
     __tablename__ = 'print_jobs'
     batch_id: Mapped[int | None] = mapped_column(ForeignKey('order_batches.id'), index=True)
+    payment_id: Mapped[int | None] = mapped_column(ForeignKey('payments.id'), index=True)
+    printer_mode: Mapped[str | None]
     status: Mapped[str] = mapped_column(default='PENDING', index=True)
     attempts: Mapped[int] = mapped_column(default=0)
     reprint: Mapped[bool] = mapped_column(default=False)
@@ -179,6 +187,8 @@ class PrintJob(Record, Base):
     routing_group: Mapped[str] = mapped_column(default='COMBINED')
     __table_args__ = (
         Index('uq_active_print_batch', 'batch_id', 'routing_group', unique=True, sqlite_where=text("status IN ('PENDING','SENDING')")),
+        Index('uq_active_print_payment', 'payment_id', unique=True, sqlite_where=text("status IN ('PENDING','SENDING')")),
+        Index('uq_original_receipt_print', 'payment_id', unique=True, sqlite_where=text('reprint = 0 AND payment_id IS NOT NULL')),
         CheckConstraint("status IN ('PENDING','SENDING','SENT','FAILED','UNKNOWN')"),
     )
 

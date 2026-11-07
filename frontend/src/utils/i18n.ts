@@ -3,10 +3,11 @@ export const zh = {tables:'桌台',orders:'订单',history:'营业记录',settin
   AVAILABLE:'空桌',OCCUPIED:'用餐中',PAYMENT_PENDING:'待结账',
   PENDING:'等待打印机',SENDING:'正在发送',SENT:'已发送至打印机',FAILED:'打印失败',UNKNOWN:'送达不确定',
   DRAFT:'草稿 · 未下单',SUBMITTED:'已下单',CANCELLED:'已取消',PAID:'已付款',
-  CASH:'现金',QR:'二维码（人工确认）',OTHER:'其他'};
+  CASH:'现金',QR:'二维码',OTHER:'其他'};
 export const label=(key:string)=>zh[key as keyof typeof zh]??key;
 
 const errors:Record<string,string> = {
+ 'Select an installed Windows receipt printer':'请选择当前主机已安装的收银热敏打印机。',
  'Incompatible modifier selections':'所选定制项目不能同时使用，请调整选项。',
  'Choose only one price variant':'请选择一种温度或包装。',
  'Only complimentary items may have a zero price':'只有免费项目可以设置为零元。',

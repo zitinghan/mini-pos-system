@@ -25,7 +25,7 @@ export default function Tables() {
   return (
     <>
       <div className="page-title">
-        <div><p className="eyebrow">今日服务 · 15 张桌台</p><h1>选择桌台</h1></div>
+        <div><p className="eyebrow">{query.data ? `今日服务 · ${query.data.length} 张桌台` : '正在加载桌台'}</p><h1>选择桌台</h1></div>
         <span className="pill">每 4 秒更新</span>
       </div>
       <div className="legend"><span>● 空桌</span><span>● 用餐中</span><span>● 待结账</span></div>

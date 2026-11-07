@@ -29,10 +29,17 @@ def run_once():
         job.status, job.claimed_at, job.attempts = 'SENDING', now(), job.attempts + 1
         identity, ticket, reprint = job.id, {**job.ticket, 'ticket_number': job.id}, job.reprint
         config = db.get(PrinterConfiguration, 1).config.copy()
-        if job.routing_group in ('KITCHEN', 'BEVERAGE'):
+        if job.routing_group == 'RECEIPT':
+            config.update(mode=config.get('receipt_mode', 'mock'), host=config.get('receipt_host', ''),
+                port=config.get('receipt_port', 9100), width=config.get('receipt_width', 384),
+                cutter=config.get('receipt_cutter', False), simulation=config.get('receipt_simulation', 'success'),
+                printer_name=config.get('receipt_printer_name', ''), print_mode='raster', profile='default',
+                raster_command='bitImageRaster')
+        elif job.routing_group in ('KITCHEN', 'BEVERAGE') and config.get('separate_stations', False):
             station = job.routing_group.lower()
             config['host'] = config.get(f'{station}_host') or config.get('host', '')
             config['port'] = config.get(f'{station}_port', config.get('port', 9100))
+        job.printer_mode = config['mode']
     # Connection, rendering and all writes happen after the claim transaction commits.
     status, error, preview = 'SENT', None, None
     connection = None
@@ -64,8 +71,12 @@ def run_once():
             if config['cutter']:
                 device.cut()
             payload = device.output
-            connection = socket.create_connection((config['host'], config['port']), timeout=5)
-            connection.settimeout(10)
+            if config['mode'] == 'windows':
+                from app.printing.windows import WindowsRawPrinter
+                connection = WindowsRawPrinter(config['printer_name'])
+            else:
+                connection = socket.create_connection((config['host'], config['port']), timeout=5)
+                connection.settimeout(10)
             write_started = True
             connection.sendall(payload)
     except Exception as exc:
@@ -73,7 +84,11 @@ def run_once():
         error = str(exc)[:1000]
     finally:
         if connection:
-            connection.close()
+            try:
+                connection.close()
+            except Exception as exc:
+                status = 'UNKNOWN' if write_started else 'FAILED'
+                error = str(exc)[:1000]
     with transaction() as db:
         job = db.get(PrintJob, identity)
         # Do not overwrite a watchdog UNKNOWN result with a delayed success.

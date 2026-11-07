@@ -13,6 +13,7 @@ import Checkout from './pages/Checkout';
 import Orders from './pages/Orders';
 import History from './pages/History';
 import Settings from './pages/Settings';
+import Receipt from './pages/Receipt';
 
 export default function App() {
   const { token, user, signIn, signOut } = useAuth();
@@ -76,6 +77,7 @@ export default function App() {
           <Route path="/checkout/:id" element={admin ? <Checkout /> : <Navigate to="/" replace />} />
           <Route path="/history" element={admin ? <History /> : <Navigate to="/" replace />} />
           <Route path="/settings" element={admin ? <Settings /> : <Navigate to="/" replace />} />
+          <Route path="/receipts/:paymentId" element={admin ? <Receipt /> : <Navigate to="/" replace />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

@@ -45,6 +45,7 @@ export default function Settings() {
   const menu = useQuery({ queryKey: ['menu'], queryFn: () => api<MenuItem[]>('/menu'), refetchInterval: 4000 });
   const promotions = useQuery({ queryKey: ['menu-promotions'], queryFn: () => api<Promotion[]>('/menu/promotions'), refetchInterval: 15000 });
   const printer = useQuery({ queryKey: ['printer-config'], queryFn: () => api<Printer>('/printers/config') });
+  const windowsPrinters = useQuery({ queryKey: ['windows-printers'], queryFn: () => api<{printers:string[]}>('/printers/windows') });
   const users = useQuery({ queryKey: ['users'], queryFn: () => api<User[]>('/users') });
   useEffect(() => { if (printer.data) setForm(printer.data); }, [printer.data]);
   const save = useMutation({ mutationFn: () => api('/printers/config', 'PUT', form), onSuccess: () => { void client.invalidateQueries({ queryKey: ['printer-config'] }); } });
@@ -85,10 +86,10 @@ export default function Settings() {
         {item.groups.filter((group) => group.minimum === 0).map((group) => <section key={group.id}><h2>{group.name}</h2>{group.options.map((option) => <Customization key={option.id} option={option} peers={group.options} />)}</section>)}
       </details>)}
     </section>
-    <section className="card stack"><h2>厨房 / 饮料打印机 · 58mm</h2>{!form ? <Loading /> : <form className="stack" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
+    <section className="card stack"><h2>厨房 / 饮料打印机</h2>{!form ? <Loading /> : <form className="stack" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
       <label>连接模式<select value={form.mode} onChange={(event) => change('mode', event.target.value as Printer['mode'])}><option value="mock">模拟打印机（开发）</option><option value="network">店内网络 ESC/POS</option></select></label>
       <label className="check"><input type="checkbox" checked={!!form.separate_stations} onChange={(event) => change('separate_stations', event.target.checked)} />厨房和饮料使用独立打印机</label>
-      {!form.separate_stations && <small>同一张票按厨房 / 饮料分区，每个菜品只打印一次。</small>}
+      {!form.separate_stations && <small>同一台打印机分别打印厨房单、饮料单，每项只打印一次。</small>}
       {form.mode === 'mock' && <label>模拟结果<select value={form.simulation} onChange={(event) => change('simulation', event.target.value as Printer['simulation'])}><option value="success">成功发送</option><option value="connection_failure">连接失败（未发送）</option><option value="timeout">发送超时（结果不确定）</option><option value="uncertain">送达不确定</option></select></label>}
       {form.mode === 'network' && (form.separate_stations ? <>
         <label>厨房打印机 IP<input value={form.kitchen_host ?? ''} placeholder="192.168.1.200" onChange={(event) => change('kitchen_host', event.target.value)} /></label>
@@ -97,6 +98,9 @@ export default function Settings() {
         <label>饮料 TCP 端口<input type="number" value={form.beverage_port ?? 9100} onChange={(event) => change('beverage_port', Number(event.target.value))} /></label>
       </> : <><label>打印机局域网 IP<input value={form.host} placeholder="192.168.1.200" onChange={(event) => change('host', event.target.value)} /></label><label>TCP 端口<input type="number" value={form.port} onChange={(event) => change('port', Number(event.target.value))} /></label></>)}
       <label>打印模式<select value={form.print_mode} onChange={(event) => change('print_mode', event.target.value as Printer['print_mode'])}><option value="raster">图片（推荐中文）</option><option value="text">文字（需要打印机支持）</option></select></label>
+      <div><strong>厨房 / 饮料纸宽</strong><div className="option-grid">
+        {[{ width: 384, name: '58mm / 384 dots' }, { width: 576, name: '80mm / 576 dots' }].map((paper) => <button type="button" key={paper.width} aria-pressed={form.width === paper.width} className={form.width === paper.width ? 'selected' : ''} onClick={() => setForm({ ...form, width: paper.width, print_mode: 'raster' })}>{paper.name}</button>)}
+      </div><small>选择纸宽会使用图片打印，让中文和备注按整张纸的可打印宽度换行。商品及选项保持大字。</small></div>
       <details><summary>硬件兼容设置</summary><div className="stack">
         <label>编码<input value={form.encoding} onChange={(event) => change('encoding', event.target.value)} /></label>
         <label>ESC/POS 配置名称<input value={form.profile} onChange={(event) => change('profile', event.target.value)} /></label>
@@ -105,6 +109,21 @@ export default function Settings() {
         <label>打印后走纸行数<input type="number" min={0} max={10} value={form.feed} onChange={(event) => change('feed', Number(event.target.value))} /></label>
         <label className="check"><input type="checkbox" checked={form.cutter} onChange={(event) => change('cutter', event.target.checked)} />兼容自动切纸器</label>
       </div></details>
+      <h2>收银收据打印机（独立）</h2>
+      <small>成功收款并清台后自动打印整桌收据，不发送到厨房打印机。中文使用图片输出。</small>
+      <label>收据连接模式<select value={form.receipt_mode ?? 'mock'} onChange={(event) => change('receipt_mode', event.target.value as Printer['receipt_mode'])}>
+        <option value="mock">只生成预览（不打印）</option><option value="windows">Windows USB 热敏打印机</option><option value="network">收银网络打印机</option>
+      </select></label>
+      {form.receipt_mode === 'windows' && <>
+        <label>Windows 收银打印机<select value={form.receipt_printer_name ?? ''} onChange={(event) => change('receipt_printer_name', event.target.value)}><option value="">请选择已安装的 ESC/POS 热敏打印机</option>{windowsPrinters.data?.printers.map((name) => <option key={name} value={name}>{name}</option>)}</select></label>
+        <ErrorBox error={windowsPrinters.error} /><small>先在主机安装驱动并接好 USB；例如 POS-80C。换电脑后需重新选择该电脑的打印队列。</small>
+      </>}
+      {form.receipt_mode === 'network' && <>
+        <label>收银打印机 IP<input value={form.receipt_host ?? ''} placeholder="192.168.1.202" onChange={(event) => change('receipt_host', event.target.value)} /></label>
+        <label>收银 TCP 端口<input type="number" min={1} max={65535} value={form.receipt_port ?? 9100} onChange={(event) => change('receipt_port', Number(event.target.value))} /></label>
+      </>}
+      <label>收据纸宽<select value={form.receipt_paper_mm ?? ((form.receipt_width ?? 384) >= 500 ? 80 : 58)} onChange={(event) => setForm({ ...form, receipt_paper_mm: Number(event.target.value), receipt_width: Number(event.target.value) === 80 ? 576 : 384 })}><option value={55}>55mm / 384 dots</option><option value={58}>58mm / 384 dots</option><option value={80}>80mm / 576 dots</option></select></label>
+      <label className="check"><input type="checkbox" checked={!!form.receipt_cutter} onChange={(event) => change('receipt_cutter', event.target.checked)} />收据自动切纸（仅支持的机型）</label>
       <ErrorBox error={save.error || test.error} />{save.isSuccess && <p role="status">设置已保存</p>}{test.isSuccess && <p role="status">测试任务已排队，请到订单页检查结果。</p>}
       <button className="primary" disabled={save.isPending}>保存打印设置</button><button type="button" disabled={test.isPending} onClick={() => test.mutate()}>用已保存配置打印测试单</button>
     </form>}</section>

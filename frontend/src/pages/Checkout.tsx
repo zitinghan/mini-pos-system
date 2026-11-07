@@ -4,16 +4,15 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { api, requestKey } from '../services/api';
 import type { Bill, Payment } from '../services/types';
 import { money, parseSen } from '../utils/format';
-import { Lines, ErrorBox, Loading, ConfirmButton } from '../components/Common';
+import { Lines, ErrorBox, Loading } from '../components/Common';
 import { useUI } from '../stores/ui';
 
 export default function Checkout() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const [method, setMethod] = useState('CASH');
+  const [method, setMethod] = useState('QR');
   const [received, setReceived] = useState('');
   const [discard, setDiscard] = useState(false);
-  const [verified, setVerified] = useState(false);
   const bill = useQuery({
     queryKey: ['bill', id],
     queryFn: () => api<Bill>(`/table-sessions/${id}/bill`),
@@ -23,7 +22,6 @@ export default function Checkout() {
   const total = bill.data?.total ?? 0;
   const hasDrafts = bill.data?.has_drafts ?? false;
   useEffect(() => {
-    setVerified(false);
     setDiscard(false);
   }, [id, total, hasDrafts, bill.data?.status]);
   const pay = useMutation({
@@ -42,7 +40,7 @@ export default function Checkout() {
       useUI.getState().setNotice(
         `收款完成 · ${money(payment.total)} · 找零 ${money(payment.change)}`,
       );
-      navigate('/');
+      navigate(`/receipts/${payment.id}`);
     },
   });
   const resume = useMutation({
@@ -53,7 +51,7 @@ export default function Checkout() {
   if (bill.isPending) return <><Loading /><ErrorBox error={bill.error} /></>;
   const blocked = bill.isError || pay.isPending || !bill.data?.item_count || bill.data?.status !== 'PAYMENT_PENDING'
     || (bill.data?.has_drafts && !discard)
-    || (method === 'CASH' ? (total > 0 && sen === null) || (sen !== null && sen < total) : total > 0 && !verified);
+    || (method === 'CASH' && ((total > 0 && sen === null) || (sen !== null && sen < total)));
 
   return (
     <>
@@ -69,7 +67,7 @@ export default function Checkout() {
         <div className="option-grid">
           {[['CASH', '现金'], ['QR', '二维码'], ['OTHER', '其他']].map(([value, name]) => (
             <button key={value} className={method === value ? 'selected' : ''}
-              onClick={() => { setMethod(value); setVerified(false); }}>{name}</button>
+              aria-pressed={method === value} onClick={() => setMethod(value)}>{name}</button>
           ))}
         </div>
         {method === 'CASH' ? <>
@@ -82,13 +80,7 @@ export default function Checkout() {
             <strong>应找零</strong>
             <strong>{sen !== null && sen >= total ? money(sen - total) : '金额不足或格式有误'}</strong>
           </div>
-        </> : (
-          <label className="check">
-            <input type="checkbox" checked={verified}
-              onChange={(event) => setVerified(event.target.checked)} />
-            我已人工核实款项到账（系统不会自动验证）
-          </label>
-        )}
+        </> : <p className="muted">请核实款项到账后点击收款。系统会直接完成收款、清台并生成收据。</p>}
         {bill.data?.has_drafts && (
           <label className="check warning">
             <input type="checkbox" checked={discard}
@@ -96,9 +88,9 @@ export default function Checkout() {
             存在未下单草稿。我确认丢弃本桌全部草稿后收款。
           </label>
         )}
-        <ConfirmButton key={`${id}:${total}:${hasDrafts}:${method}`} disabled={!!blocked} onConfirm={() => pay.mutate()}>
+        <button type="button" className="primary" disabled={!!blocked} onClick={() => pay.mutate()}>
           {pay.isPending ? '正在收款…' : '确认收款并清台'}
-        </ConfirmButton>
+        </button>
         <button onClick={() => resume.mutate()} disabled={resume.isPending || pay.isPending}>返回继续加单</button>
       </section>
     </>

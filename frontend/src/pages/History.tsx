@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { api } from '../services/api';
 import type { Daily, Transaction } from '../services/types';
 import { today, money, localTime } from '../utils/format';
@@ -36,6 +37,7 @@ export default function History() {
       <Lines items={transaction.bill.items} />
       <p>实收 {money(transaction.received)} · 找零 {money(transaction.change)}</p>
       <small>用餐时长：{duration(transaction.bill.dining_duration_seconds)}</small>
+      <Link className="back" to={`/receipts/${transaction.id}`}>查看 / 打印收据</Link>
     </details>)}
   </>;
 }

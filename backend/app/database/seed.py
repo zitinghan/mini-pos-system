@@ -22,7 +22,7 @@ EXTRAS = ['不要青葱', '不要菜', '换成鱼圆', '加咖喱汁']
 
 def seed():
     with transaction() as db:
-        for number in range(1, 16):
+        for number in range(1, 21):
             if not db.scalar(select(RestaurantTable).where(RestaurantTable.name == f'T{number:02d}')):
                 db.add(RestaurantTable(name=f'T{number:02d}'))
         categories = {}

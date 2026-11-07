@@ -12,6 +12,7 @@ export default function Orders() {
   const admin = useAuth((state) => state.user?.role === 'ADMIN');
   const client = useQueryClient();
   const [image, setImage] = useState<string | null>(null);
+  const [receiptImage, setReceiptImage] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const jobs = useQuery({
     queryKey: ['print-jobs'],
@@ -49,24 +50,25 @@ export default function Orders() {
           </Link>
         ))}
       </div>
-      <h2>厨房 / 饮料打印记录</h2>
+      <h2>厨房 / 饮料 / 收据打印记录</h2>
       <p className="muted">“已发送”代表数据已送出，请留意厨房是否实际出纸。重复打印会标记“重印”。</p>
       <ErrorBox error={jobs.error || tables.error || error} />
       {jobs.isPending && <Loading />}
       {jobs.data?.map((job) => (
         <section className="card stack" key={job.id}>
           <div className="row spread">
-            <strong>{job.batch_id ? `订单 #${job.batch_id}` : '测试单'} / 任务 #{job.id}</strong>
+            <strong>{job.payment_id ? `收据 R${String(job.payment_id).padStart(6, '0')}` : job.batch_id ? `订单 #${job.batch_id}` : '测试单'} / 任务 #{job.id}</strong>
             <span className={`print-status ${job.status}`}>{label(job.status)}</span>
           </div>
-          <small>{localTime(job.created_at)} · {job.routing_group === 'BEVERAGE' ? '饮料' : job.routing_group === 'KITCHEN' ? '厨房' : '厨房 / 饮料'} · 尝试 {job.attempts} 次 {job.reprint ? '· 重印' : ''}</small>
+          <small>{localTime(job.created_at)} · {job.routing_group === 'RECEIPT' ? '收银收据' : job.routing_group === 'BEVERAGE' ? '饮料' : job.routing_group === 'KITCHEN' ? '厨房' : '厨房 / 饮料'} · 尝试 {job.attempts} 次 {job.reprint ? '· 重印' : ''}</small>
           {job.error && <p className="error">{translateError(job.error)}</p>}
           <div className="row">
             {job.preview && (
-              <button onClick={() => { previewJob(job.id).then(setImage).catch(setError); }}>
-                查看厨房单
+              <button onClick={() => { setReceiptImage(job.document_type === 'RECEIPT'); previewJob(job.id).then(setImage).catch(setError); }}>
+                {job.document_type === 'RECEIPT' ? '查看收据' : '查看厨房单'}
               </button>
             )}
+            {job.payment_id && <Link className="back" to={`/receipts/${job.payment_id}`}>打开付款收据</Link>}
             {admin && !['PENDING', 'SENDING'].includes(job.status) && (
               <ConfirmButton disabled={retry.isPending} onConfirm={() => retry.mutate(job.id)}>
                 核实厨房后重印
@@ -79,7 +81,7 @@ export default function Orders() {
         <div className="modal" role="dialog" aria-modal="true" aria-label="厨房单预览">
           <div className="stack">
             <button onClick={() => setImage(null)}>关闭预览</button>
-            <img className="ticket-preview" src={image} alt="厨房订单，无价格" />
+            <img className="ticket-preview" src={image} alt={receiptImage ? '客户收据及付款金额' : '厨房订单，无价格'} />
           </div>
         </div>
       )}

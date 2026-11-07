@@ -1,12 +1,12 @@
 # KOKO Mini POS v1.1 — 可可·南洋咖啡店
 
-A local-network point-of-sale system for **可可·南洋咖啡店 (KE KE / KOPITIAM)**. Built for a small Malaysian restaurant using Android phones, 15 dining tables, and a 58mm kitchen receipt printer.
+A local-network point-of-sale system for **可可·南洋咖啡店 (KE KE / KOPITIAM)**. Built for a small Malaysian restaurant using Android phones, 20 dining tables, and a 58mm kitchen receipt printer.
 
 Staff select a table, choose food and options, then submit an order to the kitchen. Cashiers review the combined table bill, record payment, and release the table. Normal restaurant operation requires no external internet connection.
 
 ## Features
 
-- **Tables:** T01–T15, availability labels, submitted totals, portion counts, and elapsed time.
+- **Tables:** T01–T20, availability labels, submitted totals, portion counts, and elapsed time.
 - **Ordering:** database-driven menus, required modifiers, quantities, persistent drafts, and additional order batches.
 - **Pricing:** integer sen, server-side validation, and submitted price snapshots that preserve historical bills.
 - **Kitchen printing:** transactional print queue, mock PNG previews, ESC/POS network output, delivery tracking, and audited manual reprints.
@@ -72,7 +72,7 @@ cd ..
 .\Start-POS.cmd
 ```
 
-The launcher applies migrations, seeds the menu and 15 tables, then starts the API, built frontend, and print worker in the background. Open `http://127.0.0.1:8080` on this PC. It uses the installed Microsoft YaHei font for CJK ticket rendering and listens on the LAN by default. Docker is not required.
+The launcher applies migrations, seeds the menu and 20 tables, then starts the API, built frontend, and print worker in the background. Open `http://127.0.0.1:8080` on this PC. It uses the installed Microsoft YaHei font for CJK ticket rendering and listens on the LAN by default. Docker is not required.
 
 For phone access, connect the phone to the same Wi-Fi and use the `http://PC_WIFI_IP:8080` address printed by the launcher. Run `scripts/enable-lan-access.ps1` once in an administrator PowerShell to allow inbound TCP 8080 for the installed Python runtime on Private networks from the local subnet. Keep this PC running and the app started. The Wi-Fi must permit devices to communicate; guest/client-isolated networks cannot reach the PC. The launcher prints the current address each time, since DHCP addresses can change. Set `POS_BIND_ADDRESS=127.0.0.1` in the launch environment if PC-only access is desired.
 
@@ -274,7 +274,7 @@ docs/              Architecture, API, operations, and validation records
 
 ## Operational scope
 
-Currency is MYR, with money stored in integer sen and reports using `Asia/Kuala_Lumpur`. Base menu prices must be positive; modifier surcharges can be zero. QR payments require manual confirmation. The MVP supports one full payment per table session.
+Currency is MYR, with money stored in integer sen and reports using `Asia/Kuala_Lumpur`. Base menu prices must be positive; modifier surcharges can be zero. Checkout defaults to QR: after checking funds, the cashier completes payment and clears the table with one button. Each successful payment queues one customer receipt to the independent cashier printer and opens its receipt page. The MVP supports one full payment per table session.
 
 Refunds, submitted-item voids, split/partial payments, taxes, discounts, and offline order synchronization are outside this MVP. If the server becomes unavailable, submission is not assumed successful; reconnect and inspect the existing order before retrying.
 
@@ -285,6 +285,8 @@ The mobile browser workflow supports LAN HTTP. Android PWA installation and serv
 - [Architecture and database schema](docs/architecture.md)
 - [API reference](docs/api.md) — interactive documentation at `/api/docs`
 - [Printer configuration and delivery behavior](docs/printing.md)
+- [Customer receipts, QR checkout and separate preparation tickets](docs/receipts.md)
+- [Manual installation and data transfer to another Windows PC](docs/windows-pc-move.md)
 - [Deployment and recovery](docs/deployment.md)
 - [Staff and cashier guide](docs/user-guide.md)
 - [Implementation plan](docs/implementation-plan.md)

@@ -1,4 +1,4 @@
-﻿"""v1.1 menu, immutable snapshots, routing, free orders and paid-session analytics."""
+"""v1.1 menu, immutable snapshots, routing, free orders and paid-session analytics."""
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from uuid import uuid4
@@ -162,7 +162,7 @@ def mixed_batch(client, headers, session, foods):
     return batch
 
 
-def test_mixed_4120_bill_rounds_snapshots_and_combined_printing(client, headers, monkeypatch):
+def test_mixed_4120_bill_rounds_snapshots_and_split_printing(client, headers, monkeypatch):
     foods = catalog(client, headers)
     session = open_session(client, headers)
     monkeypatch.setattr(orders, 'now', lambda: '2026-11-07T04:00:00+00:00')
@@ -174,9 +174,10 @@ def test_mixed_4120_bill_rounds_snapshots_and_combined_printing(client, headers,
     with transaction() as db:
         record = db.get(TableSession, session)
         assert record.first_order_at == '2026-11-07T04:00:00+00:00'
-        ticket = db.scalar(select(PrintJob)).ticket
-        assert ticket['order_type'] == 'NEW'
-        text = '\n'.join(line for line, _ in ticket_lines(ticket))
+        jobs = list(db.scalars(select(PrintJob)))
+        assert len(jobs) == 2
+        assert all(job.ticket['order_type'] == 'NEW' for job in jobs)
+        text = '\n'.join(line for job in jobs for line, _ in ticket_lines(job.ticket))
         assert '厨房' in text and '饮料' in text
         assert text.count('2 x Kopi O') == 1 and '冰 ICED' in text and '冷' in text
     assert run_once()
@@ -280,7 +281,7 @@ def test_daily_duration_average_excludes_unpaid_and_invalid(client, headers):
     assert report['dining_duration'] == {'count': 2, 'average_seconds': 1200, 'minimum_seconds': 600, 'maximum_seconds': 1800}
     assert report['total'] == 2400 and report['methods']['QR'] == 2400
 
-@pytest.mark.parametrize('separate,job_count', [(False, 1), (True, 2)])
+@pytest.mark.parametrize('separate,job_count', [(False, 2), (True, 2)])
 def test_printer_test_routes_to_configured_stations(client, headers, separate, job_count):
     settings = client.get('/api/printers/config', headers=headers).json()
     settings['separate_stations'] = separate

@@ -12,16 +12,14 @@ from app.models.entities import (User, AuthSession, LoginAttempt, RestaurantTabl
 from app.schemas.requests import Setup, Credentials, NewUser, NewBatch, NewItem, PriceUpdate, Pay, PrinterSettings, OptionConfiguration, AvailabilityUpdate, PromotionUpdate
 from app.services import orders
 from app.services import promotions
+from app.services import receipts
+from app.printing.jobs import job_data
 
 router = APIRouter(prefix='/api')
 
 
 def idempotency_key(value: str = Header(alias='Idempotency-Key', min_length=8, max_length=128)):
     return value
-
-
-def job_data(job):
-    return {k: getattr(job, k) for k in ('id', 'batch_id', 'routing_group', 'status', 'attempts', 'reprint', 'error', 'preview', 'created_at', 'updated_at')}
 
 
 @router.get('/auth/setup-status')
@@ -360,19 +358,47 @@ def payment(identity: int, data: Pay, key: str = Depends(idempotency_key), user=
 @router.get('/print-jobs')
 def print_jobs(user=Depends(current_user)):
     with transaction() as db:
-        return [job_data(job) for job in db.scalars(select(PrintJob).order_by(PrintJob.id.desc()).limit(100))]
+        query = select(PrintJob).order_by(PrintJob.id.desc()).limit(100)
+        if user['role'] != 'ADMIN':
+            query = query.where(PrintJob.payment_id.is_(None))
+        return [job_data(job) for job in db.scalars(query)]
+
+
+@router.get('/payments/{payment_id}/receipt')
+def payment_receipt(payment_id: int, user=Depends(admin)):
+    with transaction() as db:
+        return receipts.document(db, orders.require(db, Payment, payment_id))
+
+
+@router.post('/payments/{payment_id}/receipt/print', status_code=201)
+def print_receipt(payment_id: int, key: str = Depends(idempotency_key), user=Depends(admin)):
+    with transaction() as db:
+        payment = orders.require(db, Payment, payment_id)
+        existing = db.scalar(select(AuditLog).where(AuditLog.request_key == key))
+        if existing:
+            if existing.action != 'RECEIPT_PRINT' or existing.details['payment_id'] != payment_id:
+                raise HTTPException(409, 'Idempotency key reused for another print request')
+            return job_data(orders.require(db, PrintJob, existing.details['job_id']))
+        job = receipts.queue_original(db, payment)
+        db.add(AuditLog(user_id=user['id'], action='RECEIPT_PRINT', request_key=key, details={'payment_id': payment_id, 'job_id': job.id}))
+        return job_data(job)
 
 
 @router.get('/print-jobs/{identity}')
 def print_job(identity: int, user=Depends(current_user)):
     with transaction() as db:
-        return job_data(orders.require(db, PrintJob, identity))
+        job = orders.require(db, PrintJob, identity)
+        if job.payment_id is not None and user['role'] != 'ADMIN':
+            raise HTTPException(403, 'Cashier/admin permission required')
+        return job_data(job)
 
 
 @router.get('/print-jobs/{identity}/preview')
 def preview(identity: int, user=Depends(current_user)):
     with transaction() as db:
         job = orders.require(db, PrintJob, identity)
+        if job.payment_id is not None and user['role'] != 'ADMIN':
+            raise HTTPException(403, 'Cashier/admin permission required')
         if not job.preview:
             raise HTTPException(404, 'Preview not generated yet')
         path = config.OUTPUT_DIR / job.preview
@@ -393,10 +419,13 @@ def retry(identity: int, key: str = Depends(idempotency_key), user=Depends(admin
         if source.status in ('PENDING', 'SENDING'):
             raise HTTPException(409, 'Job is already queued or sending')
         # New history row; never erase the outcome of a previous attempt.
-        descendants = list(db.scalars(select(PrintJob).where(PrintJob.batch_id == source.batch_id, PrintJob.routing_group == source.routing_group))) if source.batch_id else []
+        if source.payment_id is not None:
+            descendants = list(db.scalars(select(PrintJob).where(PrintJob.payment_id == source.payment_id)))
+        else:
+            descendants = list(db.scalars(select(PrintJob).where(PrintJob.batch_id == source.batch_id, PrintJob.routing_group == source.routing_group))) if source.batch_id else []
         if any(j.status in ('PENDING', 'SENDING') for j in descendants):
             raise HTTPException(409, 'Another attempt for this batch is already queued')
-        job = PrintJob(batch_id=source.batch_id, routing_group=source.routing_group, ticket=source.ticket, reprint=True, attempts=source.attempts)
+        job = PrintJob(batch_id=source.batch_id, payment_id=source.payment_id, routing_group=source.routing_group, ticket=source.ticket, reprint=True, attempts=source.attempts)
         db.add(job)
         db.flush()
         db.add(AuditLog(user_id=user['id'], action='REPRINT', request_key=key, details={'source_job_id': identity, 'new_job_id': job.id, 'previous_status': source.status}))
@@ -409,19 +438,33 @@ def printer_config(user=Depends(admin)):
         return PrinterSettings(**db.get(PrinterConfiguration, 1).config).model_dump()
 
 
+@router.get('/printers/windows')
+def windows_printers(user=Depends(admin)):
+    from app.printing.windows import installed_printers
+    return {'printers': installed_printers()}
+
+
 @router.put('/printers/config')
 def update_printer(data: PrinterSettings, user=Depends(admin)):
     import ipaddress
     import codecs
+    hosts = []
     if data.mode == 'network':
+        hosts.extend([data.kitchen_host, data.beverage_host] if data.separate_stations else [data.host])
+    if data.receipt_mode == 'network':
+        hosts.append(data.receipt_host)
+    if hosts:
         try:
-            hosts = [data.kitchen_host, data.beverage_host] if data.separate_stations else [data.host]
             for host in hosts:
                 address = ipaddress.ip_address(host)
                 if not address.is_private or address.is_loopback or address.is_link_local or address.is_unspecified or address.is_multicast:
                     raise ValueError()
         except ValueError:
             raise HTTPException(422, 'Printer must use a private LAN IP address')
+    if data.receipt_mode == 'windows':
+        from app.printing.windows import installed_printers
+        if not data.receipt_printer_name or data.receipt_printer_name not in installed_printers():
+            raise HTTPException(422, 'Select an installed Windows receipt printer')
     try:
         codecs.lookup(data.encoding)
     except LookupError:
@@ -438,9 +481,8 @@ def test_print(user=Depends(admin)):
         ticket = {'table': 'TEST', 'time': now(), 'order_type': 'NEW', 'items': [
             {'name': '打印测试', 'quantity': 1, 'printer_group': 'KITCHEN', 'modifiers': [{'name': '黑酱 / 不辣 / 加面'}]},
             {'name': 'Kopi O', 'quantity': 1, 'printer_group': 'BEVERAGE', 'modifiers': [{'name': '冰 ICED'}]}]}
-        separate = db.get(PrinterConfiguration, 1).config.get('separate_stations', False)
         jobs = [PrintJob(routing_group=station, ticket={**ticket, 'items': [item for item in ticket['items'] if item['printer_group'] == station]})
-                for station in ('KITCHEN', 'BEVERAGE')] if separate else [PrintJob(ticket=ticket)]
+                for station in ('KITCHEN', 'BEVERAGE')]
         db.add_all(jobs)
         db.flush()
         db.add(AuditLog(user_id=user['id'], action='TEST_PRINT', details={'job_ids': [job.id for job in jobs]}))

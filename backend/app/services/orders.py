@@ -4,7 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from app.services.pricing import SelectionGroup, PriceValidationError, calculate_price
 from app.services import promotions
-from app.models.entities import (MenuItem, MenuCategory, PrinterConfiguration, ModifierGroup, ModifierOption, MenuItemModifierGroup,
+from app.models.entities import (MenuItem, MenuCategory, ModifierGroup, ModifierOption, MenuItemModifierGroup,
     TableSession, RestaurantTable, OrderBatch, OrderItem, OrderItemModifier, PrintJob, Payment, AuditLog, now)
 
 
@@ -172,14 +172,10 @@ def submit(db, identity, key, user):
     ticket = {'table': require(db, RestaurantTable, session.table_id).name, 'batch_id': batch.id,
         'time': batch.submitted_at, 'order_type': order_type, 'restaurant': '可可·南洋咖啡店',
         'items': [item_data(db, i) for i in items]}
-    separate = db.get(PrinterConfiguration, 1).config.get('separate_stations', False)
-    if separate:
-        for station in ('KITCHEN', 'BEVERAGE'):
-            station_items = [item for item in ticket['items'] if item['printer_group'] == station]
-            if station_items:
-                db.add(PrintJob(batch_id=batch.id, routing_group=station, ticket={**ticket, 'items': station_items}))
-    else:
-        db.add(PrintJob(batch_id=batch.id, routing_group='COMBINED', ticket=ticket))
+    for station in ('KITCHEN', 'BEVERAGE'):
+        station_items = [item for item in ticket['items'] if item['printer_group'] == station]
+        if station_items:
+            db.add(PrintJob(batch_id=batch.id, routing_group=station, ticket={**ticket, 'items': station_items}))
     db.flush()
     return submission_result(db, batch)
 
@@ -227,6 +223,9 @@ def pay(db, session_id, data, key, user):
     session.status, session.closed_at, session.paid_at = 'PAID', timestamp, timestamp
     db.add(AuditLog(user_id=user['id'], action='PAYMENT', details={'session_id': session_id, 'method': data.method, 'total': current['total']}))
     db.flush()
+    # Receipt and print outbox commit with payment, never after a successful response.
+    from app.services.receipts import queue_original
+    queue_original(db, payment)
     return payment_data(payment)
 
 
