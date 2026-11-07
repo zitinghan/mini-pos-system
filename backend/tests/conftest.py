@@ -7,7 +7,7 @@ os.environ['DATABASE_URL'] = f'sqlite:///{ROOT}/pos.db'
 os.environ['PRINT_OUTPUT_DIR'] = str(ROOT / 'tickets')
 os.environ['SETUP_TOKEN'] = 'test-only-setup-token-not-a-pin'
 # Discover local CJK fonts for development tests; container has a fixed Noto path.
-for candidate in ['/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc', '/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf']:
+for candidate in ['/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc', '/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf', str(Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts/msyh.ttc')]:
     if Path(candidate).exists():
         os.environ['FONT_PATH'] = candidate
         break

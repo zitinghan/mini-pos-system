@@ -4,6 +4,10 @@
 
 Settings starts in `mock` mode. Every successful worker render creates `/data/tickets/job-ID.png` and a UTF-8 `.txt` equivalent. Authenticated staff can view the PNG from Orders; the directory is not published anonymously. Raster output requires the configured Noto CJK font; it deliberately fails instead of silently substituting unreadable Chinese glyphs. The backend image installs the font. Local developers can set `FONT_PATH` to another CJK font.
 
+Version 1.1 tickets show 可可·南洋咖啡店, without the old Chinese/English shop headings. Table numbers, item quantities/names, and selected options use large 48-pixel text in raster mode, with long lines wrapped to the configured paper width. Text mode uses double-width, double-height printing for these lines. Each ticket has a unique print-job number, batch reference, local date/time, NEW / ADD-ON / REPRINT marker, portions, drink temperature, beer package/bottle count, and optional notes. Reprints retain REPRINT / 重印.
+
+The default single printer receives one job per batch with separate 厨房 (mains/snacks) and 饮料 (drinks/beer) sections. Every item appears once. Settings can enable separate kitchen and beverage IPs/ports; jobs then contain only the matching station's items. Reprints preserve routing and station history. See [v1.1 menu, analytics and migration details](v1.1.md).
+
 Mock simulations:
 
 | Simulation | Result | Meaning |

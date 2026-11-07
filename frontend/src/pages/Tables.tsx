@@ -41,7 +41,7 @@ export default function Tables() {
             <span className="table-name">{table.name}</span>
             <span className="status">{label(table.status)}</span>
             <strong>{money(table.total)}</strong>
-            <small>{table.item_count} 份 · {elapsed(table.opened_at)}</small>
+            <small>{table.item_count} 份 · {table.first_order_at ? elapsed(table.first_order_at) : '尚未下单'}</small>
           </button>
         ))}
       </div>

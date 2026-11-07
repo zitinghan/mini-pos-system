@@ -7,6 +7,14 @@ export const zh = {tables:'桌台',orders:'订单',history:'营业记录',settin
 export const label=(key:string)=>zh[key as keyof typeof zh]??key;
 
 const errors:Record<string,string> = {
+ 'Incompatible modifier selections':'所选定制项目不能同时使用，请调整选项。',
+ 'Choose only one price variant':'请选择一种温度或包装。',
+ 'Only complimentary items may have a zero price':'只有免费项目可以设置为零元。',
+ 'Plain water must remain complimentary':'白开水必须保持免费。',
+ 'Complimentary customizations must remain free':'免费定制不能设置加价。',
+ 'Only optional customizations can be configured here':'此处只可配置可选定制项目。',
+ 'Conflicts must refer to other customizations of this item':'不兼容规则必须选择同一菜品的其他定制项目。',
+ 'Cannot pay an empty table':'空桌不能收款，请先确认下单。',
  'Base price must be positive; modifier surcharges may be zero':'菜品基础价格必须大于零，选项加价可以为零。',
  'Session expired; please sign in':'登录已过期，请重新登录。',
  'Cashier/admin permission required':'此操作需要管理员或收银员权限。',

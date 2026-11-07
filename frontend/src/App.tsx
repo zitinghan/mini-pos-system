@@ -51,7 +51,7 @@ export default function App() {
   return (
     <>
       <header>
-        <div><strong>可可云吞面</strong><small>KEKE WANTAN MEE</small></div>
+        <div><strong>可可·南洋咖啡店</strong><small>KE KE / KOPITIAM</small></div>
         <div className="row">
           <span>{user.name}</span>
           <button className="header-button" onClick={logout}>退出</button>

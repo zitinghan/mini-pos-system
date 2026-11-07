@@ -42,7 +42,8 @@ def submit(client, headers, batch, identity=None):
 @pytest.mark.parametrize('index,extra,expected', [(0,False,800),(0,True,1000),(1,False,800),(1,True,900),(2,False,800),(2,True,1000)])
 def test_menu_pricing(client, headers, index, extra, expected):
     food = menu(client, headers)[index]
-    selected = [g['options'][-1 if extra and n == len(food['groups'])-1 else 0]['id'] for n,g in enumerate(food['groups'])]
+    required = [g for g in food['groups'] if g['minimum'] > 0]
+    selected = [g['options'][-1 if extra and n == len(required)-1 else 0]['id'] for n,g in enumerate(required)]
     batch = draft(client, headers, open_session(client, headers))
     response = add(client, headers, batch, food, selected)
     assert response.status_code == 201
@@ -71,7 +72,7 @@ def test_acceptance_a_b_c_and_price_snapshot(client, headers):
     assert run_once()
     second_job = client.get('/api/print-jobs', headers=headers).json()[0]
     ticket = (OUTPUT_DIR / f"job-{second_job['id']}.txt").read_text()
-    assert '面粉糕' in ticket and '2 x 云吞面' not in ticket
+    assert '面粉粿' in ticket and '2 x 云吞面' not in ticket
     assert client.patch('/api/menu/items/1', headers=headers, json={'price': 1500}).status_code == 200
     bill = client.get(f'/api/table-sessions/{session}/bill', headers=headers).json()
     assert bill['total'] == 2900 and len(bill['items']) == 2

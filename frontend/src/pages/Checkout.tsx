@@ -30,7 +30,7 @@ export default function Checkout() {
     mutationFn: () => {
       const payload = {
         method,
-        received: method === 'CASH' ? sen : total,
+        received: method === 'CASH' ? (sen ?? (total === 0 ? 0 : null)) : total,
         expected_total: total,
         discard_drafts: discard,
       };
@@ -51,9 +51,9 @@ export default function Checkout() {
   });
 
   if (bill.isPending) return <><Loading /><ErrorBox error={bill.error} /></>;
-  const blocked = bill.isError || pay.isPending || total <= 0 || bill.data?.status !== 'PAYMENT_PENDING'
+  const blocked = bill.isError || pay.isPending || !bill.data?.item_count || bill.data?.status !== 'PAYMENT_PENDING'
     || (bill.data?.has_drafts && !discard)
-    || (method === 'CASH' ? sen === null || sen < total : !verified);
+    || (method === 'CASH' ? (total > 0 && sen === null) || (sen !== null && sen < total) : total > 0 && !verified);
 
   return (
     <>

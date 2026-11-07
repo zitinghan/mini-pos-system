@@ -1,6 +1,21 @@
 # Validation Record
 
-## Latest check — 2026-11-04
+## v1.1 Windows validation — 2026-11-07
+
+- Python 3.12.10; Node 22.22.2 for complete browser acceptance; frontend build and unit tests also passed with installed Node 24.21.0.
+- Full pytest suite: **115 passed**, one AnyIO alias deprecation warning. Additional v1.0 draft-add audit compatibility case: **1 passed**. JUnit output: ignored `artifacts/checks/v11-backend.xml`.
+- Frontend: **11 unit tests passed**; TypeScript and production Vite build passed.
+- Playwright: **6 browser scenarios passed** at Android-style widths 360, 390, and 412. Original ordering/add-on/mock-ticket/cash/history workflow and mixed-category/beer/analytics workflow passed. RM41.20 mixed order and RM101.20 with one Carlsberg 3-bottle package checked. Screenshots inspected; no horizontal overflow.
+- Frozen-schema credential/SQLite/backup/restore invariants: **8 passed**. Closed the test's SQLite backup handle explicitly to permit Windows cleanup.
+- Alembic `0001 -> 0002_v11` tested against populated historical records and against a backup of the current local database. Repeated initialization preserves SKU identities, menu overrides, verification decisions and all original history values.
+- Local app stopped with no in-flight print, backed up through SQLite's online backup API, migrated, compared original history columns row-for-row, then restarted. API reports **1.1.0** and both server/worker run. New menu contains **29 active products** across four categories. No test orders were added to the live database.
+- 384-dot mixed kitchen/beverage and reprint PNGs rendered with the installed Microsoft YaHei CJK font and inspected. Large item/option text, new Chinese name, sections, temperature, package, bottle count and notes are present. Hardware delivery is not claimed.
+- Browser runner now handles Windows executable paths and avoids the legacy Playwright ESM-loader discovery stall using native TypeScript on recent Windows Node. The normal `npm run test:e2e` wrapper lists all six scenarios successfully.
+
+Complete release scope, menu pricing, migration instructions and limitations: [v1.1 release notes](v1.1.md). Physical printer and Android devices, LAN reliability, text/raster/feed/cutter behavior, separate station hardware, two beverage-variant verification flags, and existing dependency audit findings remain follow-up work.
+
+
+## Previous check — 2026-11-04
 
 Docker 29.1.3, Compose 2.40.3 and pip 25.1.1 are now installed. A Python 3.14 virtual environment can be created successfully. Application dependency installation still fails (the managed session cannot resolve package registries), and the Docker daemon socket returns permission denied. No backend framework or pytest is installed locally. GitHub connector tools now appear in discovery, but actual repository/profile/fetch calls return `Unknown tool`; neither Git transport nor the connector has successfully uploaded code.
 

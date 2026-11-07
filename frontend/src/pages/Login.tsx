@@ -30,9 +30,9 @@ export default function Login() {
   return (
     <main className="login">
       <div className="brand-mark">可可</div>
-      <p className="eyebrow">KEKE WANTAN MEE</p>
+      <p className="eyebrow">KE KE / KOPITIAM</p>
       <h1>{setup ? '首次设置管理员' : '欢迎回来'}</h1>
-      <p className="muted">可可云吞面 · 店内点餐系统</p>
+      <p className="muted">可可·南洋咖啡店 · 店内点餐系统</p>
       {status.isPending ? <Loading /> : (
         <form className="card stack" onSubmit={(event) => {
           event.preventDefault();

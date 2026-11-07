@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, requestKey, clearKey } from '../services/api';
-import type { MenuItem, Batch, Bill } from '../services/types';
+import type { MenuItem, Batch, Bill, CategoryCode } from '../services/types';
 import { useAuth } from '../stores/auth';
 import { useUI } from '../stores/ui';
 import { money } from '../utils/format';
@@ -11,33 +11,43 @@ import { Lines, ErrorBox, Loading, ConfirmButton } from '../components/Common';
 
 interface PickerProps {
   item: MenuItem;
-  onAdd: (quantity: number, ids: number[]) => void;
+  onAdd: (quantity: number, ids: number[], notes?: string) => void;
   busy: boolean;
+}
+
+function startingPrice(item: MenuItem) {
+  const variants = item.groups.flatMap((group) => group.options.filter((option) => option.enabled !== false && option.unit_price != null).map((option) => option.unit_price!));
+  return variants.length ? Math.min(...variants) : item.base_price;
 }
 
 export function ItemPicker({ item, onAdd, busy }: PickerProps) {
   const [selected, setSelected] = useState<number[]>(
-    item.groups.flatMap((group) => group.options.filter((option) => option.is_default)
+    item.groups.flatMap((group) => group.options.filter((option) => option.is_default && option.enabled !== false)
       .map((option) => option.id)),
   );
   const [quantity, setQuantity] = useState(1);
-  const price = item.base_price + item.groups.flatMap((group) => group.options)
-    .filter((option) => selected.includes(option.id))
-    .reduce((sum, option) => sum + option.price, 0);
+  const [notes, setNotes] = useState('');
+  const allOptions = item.groups.flatMap((group) => group.options);
+  const selectedOptions = allOptions.filter((option) => selected.includes(option.id));
+  const variant = selectedOptions.find((option) => option.unit_price != null);
+  const price = (variant?.unit_price ?? item.base_price) + selectedOptions.reduce((sum, option) => sum + option.price, 0);
   const valid = item.groups.every((group) => {
     const count = group.options.filter((option) => selected.includes(option.id)).length;
     return count >= group.minimum && count <= group.maximum;
-  });
+  }) && !selectedOptions.some((option) => option.incompatible_with?.some((id) => selected.includes(id)));
 
   return (
     <section className="card stack">
       <h2>{item.name}</h2>
+      {item.description && <p className="muted">{item.description}</p>}
       {item.groups.map((group) => (
         <fieldset key={group.id}>
           <legend>{group.name} <small>{group.minimum > 0 ? '必选' : '可选'}</small></legend>
           <div className="option-grid">
-            {group.options.map((option) => (
+            {group.options.filter((option) => option.enabled !== false).map((option) => (
               <button type="button" key={option.id}
+                disabled={!selected.includes(option.id) && selectedOptions.some((entry) =>
+                  entry.incompatible_with?.includes(option.id) || option.incompatible_with?.includes(entry.id))}
                 aria-pressed={selected.includes(option.id)}
                 className={selected.includes(option.id) ? 'selected' : ''}
                 onClick={() => setSelected((previous) => {
@@ -51,7 +61,8 @@ export function ItemPicker({ item, onAdd, busy }: PickerProps) {
                     ? previous.filter((id) => id !== option.id) : [...previous, option.id];
                 })}>
                 {option.name}
-                {option.price > 0 && <small>+ {money(option.price)}</small>}
+                {option.unit_price != null ? <small>{money(option.unit_price)}</small>
+                  : option.price > 0 && <small>+ {money(option.price)}</small>}
               </button>
             ))}
           </div>
@@ -67,8 +78,10 @@ export function ItemPicker({ item, onAdd, busy }: PickerProps) {
             onClick={() => setQuantity((value) => value + 1)}>+</button>
         </div>
       </div>
+      {!!variant?.bottles && <p>{quantity} × {variant.name} · 共 {quantity * variant.bottles} 瓶</p>}
+      <label>备注（可选）<input maxLength={240} value={notes} onChange={(event) => setNotes(event.target.value)} /></label>
       <button type="button" className="primary" disabled={busy || !valid}
-        onClick={() => onAdd(quantity, selected)}>
+        onClick={() => notes.trim() ? onAdd(quantity, selected, notes.trim()) : onAdd(quantity, selected)}>
         {busy ? '正在保存…' : `加入草稿 · ${money(price * quantity)}`}
       </button>
     </section>
@@ -81,6 +94,7 @@ export default function Session() {
   const navigate = useNavigate();
   const user = useAuth((state) => state.user);
   const [chosen, setChosen] = useState<MenuItem | null>(null);
+  const [category, setCategory] = useState<CategoryCode>('MAINS');
   const [error, setError] = useState<unknown>(null);
   const bill = useQuery({
     queryKey: ['bill', id],
@@ -105,12 +119,12 @@ export default function Session() {
   const drafts = ownDraft?.items.filter((item) => item.status === 'DRAFT') ?? [];
 
   const add = useMutation({
-    mutationFn: async ({ quantity, ids }: { quantity: number; ids: number[] }) => {
+    mutationFn: async ({ quantity, ids, notes = '' }: { quantity: number; ids: number[]; notes?: string }) => {
       if (!chosen) throw new Error('请选择菜品');
       const batch = ownDraft ?? await api<{ id: number }>('/order-batches', 'POST', {
         session_id: Number(id),
       });
-      const payload = { menu_item_id: chosen.id, quantity, option_ids: [...ids].sort((a, b) => a - b) };
+      const payload = { menu_item_id: chosen.id, quantity, option_ids: [...ids].sort((a, b) => a - b), notes };
       // Retain the same request identity if the response is lost, including across reloads.
       const scope = `add:${batch.id}:${JSON.stringify(payload)}`;
       await api(`/order-batches/${batch.id}/items`, 'POST', payload, requestKey(scope));
@@ -191,16 +205,24 @@ export default function Session() {
         </div>
       )}
       {active && <>
+        <div className="category-tabs" role="group" aria-label="菜品分类">
+          {([['MAINS', '主食', 'Mains'], ['SNACKS', '小吃', 'Snacks'], ['DRINKS', '饮料', 'Drinks'], ['BEER', '啤酒', 'Beer']] as const).map(([code, name, english]) => (
+            <button key={code} aria-pressed={category === code} onClick={() => { setCategory(code); setChosen(null); }}>
+              {name}<small>{english}</small>
+            </button>
+          ))}
+        </div>
         <div className="food-grid">
-          {menu.data?.map((item) => (
+          {menu.data?.filter((item) => (item.category_code ?? 'MAINS') === category).map((item) => (
             <button className={`food-button ${chosen?.id === item.id ? 'selected' : ''}`}
               key={item.id} onClick={() => setChosen(item)}>
-              <span>{item.name}</span><small>{money(item.base_price)} 起</small>
+              <span>{item.name}</span><small>{money(startingPrice(item))} 起</small>
+              {item.description && <small>{item.description}</small>}
             </button>
           ))}
         </div>
         {chosen && <ItemPicker key={chosen.id} item={chosen} busy={add.isPending}
-          onAdd={(quantity, ids) => add.mutate({ quantity, ids })} />}
+          onAdd={(quantity, ids, notes) => add.mutate({ quantity, ids, notes })} />}
       </>}
       {ownDraft && (
         <section className="card stack">
@@ -229,9 +251,9 @@ export default function Session() {
         ))}
         {!bill.data?.items.length && <p className="muted">尚未确认任何菜品。</p>}
         <div className="row spread"><h2>合计</h2><h2>{money(bill.data?.total ?? 0)}</h2></div>
-        {cashier && <button className="primary" disabled={checkout.isPending || !bill.data?.total}
+        {cashier && <button className="primary" disabled={checkout.isPending || !bill.data?.item_count}
           onClick={() => checkout.mutate()}>查看账单 / 收款</button>}
-        {cashier && !bill.data?.total && (
+        {cashier && !bill.data?.item_count && (
           <ConfirmButton disabled={closeEmpty.isPending} onConfirm={() => closeEmpty.mutate()}>
             取消草稿并释放空桌
           </ConfirmButton>

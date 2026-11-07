@@ -1,6 +1,6 @@
-# KEKE WANTAN MEE — Mini POS
+# KOKO Mini POS v1.1 — 可可·南洋咖啡店
 
-A local-network point-of-sale system for **可可云吞面 (KEKE WANTAN MEE)**. Built for a small Malaysian restaurant using Android phones, 15 dining tables, and a 58mm kitchen receipt printer.
+A local-network point-of-sale system for **可可·南洋咖啡店 (KE KE / KOPITIAM)**. Built for a small Malaysian restaurant using Android phones, 15 dining tables, and a 58mm kitchen receipt printer.
 
 Staff select a table, choose food and options, then submit an order to the kitchen. Cashiers review the combined table bill, record payment, and release the table. Normal restaurant operation requires no external internet connection.
 
@@ -16,20 +16,25 @@ Staff select a table, choose food and options, then submit an order to the kitch
 - **Mobile interface:** Simplified Chinese labels, large touch controls, responsive layouts, and PWA assets.
 - **Recovery:** persistent SQLite storage, database migrations, and SQLite-safe backup/restore scripts.
 
-## Project status
+## Version 1.1 and validation
 
-The application source and deployment configuration are implemented. Confirmed validation as of **2026-11-04**:
+Version 1.1 adds four touch-friendly categories and 29 products: three mains, seven snacks, 15 paid drinks, complimentary plain water, and three beers. Hot/Iced and beer packages have explicit database prices. Per-dish free customizations, dining duration, category sales analytics, and kitchen/beverage routing extend the existing workflows. See the [complete menu, migration, changed files and release notes](docs/v1.1.md).
+
+Validated on Windows on **2026-11-07**:
 
 | Check | Result |
 | --- | --- |
-| Backend pytest suite in a Python 3.12 Docker container | **40 passed**, one dependency deprecation warning |
-| Standalone pricing, credential, database, and recovery checks | **20 passed** |
-| Chinese monochrome kitchen-ticket rendering | Generated and checked |
-| Frontend TypeScript build | Reported test-query type errors corrected; rebuild pending |
-| Frontend unit tests and three-width browser acceptance | Pending execution |
-| Complete running-stack, physical Android, and printer acceptance | Pending verification |
+| Full backend regression suite | **115 passed**, one dependency deprecation warning |
+| Additional cross-version draft-retry regression | **1 passed** |
+| Frontend unit tests | **11 passed** |
+| Browser acceptance at 360 / 390 / 412 pixels | **6 passed** |
+| SQLite, credentials and backup/recovery invariants | **8 passed** |
+| TypeScript / production frontend build | Passed |
+| Populated v1 migration and repeated menu seeding | Passed |
+| Live database upgrade and history comparison | Passed; private backup retained |
+| Mixed kitchen/beverage monochrome receipt | Rendered and visually inspected |
 
-The standalone suites overlap portions of backend coverage. The status above does not certify production readiness. See [validation records](docs/validation.md) for evidence, fixes, and remaining checks.
+The local application now runs v1.1 at `http://127.0.0.1:8080`. Hardware Android/58mm printer/LAN acceptance remains on-site work. Bottled-water and canned-drink Hot/Iced variants are flagged for administrator verification in Settings. Existing dependency audit findings remain maintenance work. See [validation records](docs/validation.md) for historical and current evidence.
 
 ## Architecture
 

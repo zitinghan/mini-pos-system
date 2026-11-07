@@ -49,7 +49,7 @@ export default function Orders() {
           </Link>
         ))}
       </div>
-      <h2>厨房打印记录</h2>
+      <h2>厨房 / 饮料打印记录</h2>
       <p className="muted">“已发送”代表数据已送出，请留意厨房是否实际出纸。重复打印会标记“重印”。</p>
       <ErrorBox error={jobs.error || tables.error || error} />
       {jobs.isPending && <Loading />}
@@ -59,7 +59,7 @@ export default function Orders() {
             <strong>{job.batch_id ? `订单 #${job.batch_id}` : '测试单'} / 任务 #{job.id}</strong>
             <span className={`print-status ${job.status}`}>{label(job.status)}</span>
           </div>
-          <small>{localTime(job.created_at)} · 尝试 {job.attempts} 次 {job.reprint ? '· 重印' : ''}</small>
+          <small>{localTime(job.created_at)} · {job.routing_group === 'BEVERAGE' ? '饮料' : job.routing_group === 'KITCHEN' ? '厨房' : '厨房 / 饮料'} · 尝试 {job.attempts} 次 {job.reprint ? '· 重印' : ''}</small>
           {job.error && <p className="error">{translateError(job.error)}</p>}
           <div className="row">
             {job.preview && (

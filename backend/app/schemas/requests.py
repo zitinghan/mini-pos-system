@@ -21,6 +21,7 @@ class NewItem(StrictModel):
     menu_item_id: int = Field(gt=0)
     quantity: int = Field(ge=1, le=99)
     option_ids: list[int] = Field(max_length=30)
+    notes: str = Field(default='', max_length=240)
 
 class PriceUpdate(StrictModel):
     price: int = Field(ge=0, le=1000000)
@@ -28,7 +29,7 @@ class PriceUpdate(StrictModel):
 class Pay(StrictModel):
     method: Literal['CASH', 'QR', 'OTHER']
     received: int = Field(ge=0, le=10000000)
-    expected_total: int = Field(gt=0)
+    expected_total: int = Field(ge=0)
     discard_drafts: bool = False
 
 class PrinterSettings(StrictModel):
@@ -43,3 +44,12 @@ class PrinterSettings(StrictModel):
     width: int = Field(default=384, ge=192, le=576)
     feed: int = Field(default=3, ge=0, le=10)
     cutter: bool = False
+    separate_stations: bool = False
+    kitchen_host: str = Field(default='', max_length=253)
+    kitchen_port: int = Field(default=9100, ge=1, le=65535)
+    beverage_host: str = Field(default='', max_length=253)
+    beverage_port: int = Field(default=9100, ge=1, le=65535)
+
+class OptionConfiguration(StrictModel):
+    enabled: bool
+    incompatible_with: list[int] = Field(default_factory=list, max_length=30)

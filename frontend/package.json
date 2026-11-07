@@ -1,14 +1,14 @@
 {
   "name": "keke-mini-pos",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0",
     "build": "tsc -b && vite build",
     "test": "vitest run",
     "preview": "vite preview --host 0.0.0.0",
-    "test:e2e": "playwright test",
+    "test:e2e": "node ../scripts/run-browser-tests.cjs",
     "format": "prettier --write src *.ts *.js *.json",
     "lint": "tsc --noEmit"
   },

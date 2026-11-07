@@ -1,5 +1,5 @@
 // Cache the application shell only. API requests and mutations always use the network.
-const CACHE = 'keke-shell-v2';
+const CACHE = 'koko-shell-v11';
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);

@@ -5,7 +5,7 @@ import Checkout from './Checkout';
 
 const state = vi.hoisted(() => ({ total: 2900, hasDrafts: false }));
 vi.mock('@tanstack/react-query', () => ({
-  useQuery: () => ({ data: { total: state.total, items: [], status: 'PAYMENT_PENDING', table: 'T05', has_drafts: state.hasDrafts }, isPending: false, isError: false }),
+  useQuery: () => ({ data: { total: state.total, item_count: 1, items: [], status: 'PAYMENT_PENDING', table: 'T05', has_drafts: state.hasDrafts }, isPending: false, isError: false }),
   useMutation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
@@ -14,6 +14,13 @@ function View() { return <MemoryRouter><Checkout /></MemoryRouter>; }
 beforeEach(() => { state.total = 2900; state.hasDrafts = false; });
 
 describe('checkout acknowledgement', () => {
+  it('allows a submitted complimentary order to settle with no cash input', () => {
+    state.total = 0;
+    render(<View />);
+    expect(screen.getByRole('button', { name: '确认收款并清台' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: '确认收款并清台' }));
+    expect(screen.getByRole('button', { name: /^确认$/ })).toBeEnabled();
+  });
   it('requires fresh confirmation after the polled bill changes', async () => {
     const view = render(<View />);
     fireEvent.click(screen.getByRole('button', { name: /^二维码$/ }));

@@ -8,17 +8,33 @@ def ticket_lines(ticket, reprint=False):
     lines = []
     if reprint:
         lines.append(('REPRINT / 重印', 25))
-    lines.extend([('可可云吞面', 30), ('KEKE WANTAN MEE', 18), (f"桌号 {ticket['table']}", 48)])
+    lines.append((ticket.get('restaurant', '可可·南洋咖啡店'), 32))
+    lines.append((f"桌号 {ticket['table']}", 48))
+    number = ticket.get('ticket_number', ticket.get('batch_id', 'TEST'))
+    lines.append((f"票号 #{str(number).zfill(6)}", 22))
     lines.append((f"订单 #{ticket.get('batch_id', 'TEST')}", 22))
+    order_type = 'REPRINT' if reprint else ticket.get('order_type', 'NEW')
+    lines.append((f"类型 {order_type}", 25))
     timestamp = datetime.fromisoformat(ticket['time']).astimezone(ZoneInfo('Asia/Kuala_Lumpur'))
     lines.append((timestamp.strftime('%d/%m %H:%M'), 20))
     total = 0
-    for item in ticket['items']:
-        lines.append(('------------------------', 20))
-        lines.append((f"{item['quantity']} x {item['name']}", 30))
-        total += item['quantity']
-        for modifier in item['modifiers']:
-            lines.append((f"  {modifier['name']}", 25))
+    for station, label in [('KITCHEN', '厨房'), ('BEVERAGE', '饮料')]:
+        items = [item for item in ticket['items'] if item.get('printer_group', 'KITCHEN') == station]
+        if not items:
+            continue
+        lines.append((f'----- {label} -----', 30))
+        for item in items:
+            lines.append(('------------------------', 20))
+            lines.append((f"{item['quantity']} x {item['name']}", 48))
+            total += item['quantity']
+            if item.get('description'):
+                lines.append((f"  {item['description']}", 36))
+            for modifier in item['modifiers']:
+                lines.append((f"  {modifier['name']}", 48))
+            if item.get('physical_bottles'):
+                lines.append((f"  共 {item['physical_bottles']} 瓶", 36))
+            if item.get('notes'):
+                lines.append((f"备注 {item['notes']}", 36))
     lines.extend([('========================', 20), (f'共 {total} 份', 30)])
     return lines
 

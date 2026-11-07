@@ -6,6 +6,7 @@ import sqlite3
 import tempfile
 import unittest
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 
 ROOT = Path(__file__).resolve().parents[1]
 spec = importlib.util.spec_from_file_location('backup', ROOT / 'scripts/backup.py')
@@ -104,7 +105,7 @@ class DatabaseInvariants(unittest.TestCase):
     def test_online_backup_preserves_wal_and_restore(self):
         destination = Path(self.directory.name) / 'backup.db'
         backup_module.backup(self.path, destination)
-        with sqlite3.connect(destination) as copy:
+        with closing(sqlite3.connect(destination)) as copy:
             self.assertEqual(copy.execute('SELECT name FROM restaurant_tables').fetchone()[0], 'T01')
         with self.assertRaises(ValueError):
             backup_module.restore(destination, self.path, False)

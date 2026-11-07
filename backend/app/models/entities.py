@@ -42,12 +42,18 @@ class TableSession(Record, Base):
     table_id: Mapped[int] = mapped_column(ForeignKey('restaurant_tables.id'), index=True)
     status: Mapped[str] = mapped_column(default='OCCUPIED')
     closed_at: Mapped[str | None]
+    opened_at: Mapped[str] = mapped_column(default=now)
+    first_order_at: Mapped[str | None]
+    paid_at: Mapped[str | None]
     __table_args__ = (Index('uq_active_table', 'table_id', unique=True, sqlite_where=text("status IN ('OCCUPIED','PAYMENT_PENDING')")), CheckConstraint("status IN ('OCCUPIED','PAYMENT_PENDING','PAID','CANCELLED')"))
 
 class MenuCategory(Record, Base):
     __tablename__ = 'menu_categories'
     name: Mapped[str]
     display_order: Mapped[int] = mapped_column(default=0)
+    code: Mapped[str | None] = mapped_column(unique=True)
+    english_name: Mapped[str] = mapped_column(default='')
+    printer_group: Mapped[str] = mapped_column(default='KITCHEN')
 
 class MenuItem(Record, Base):
     __tablename__ = 'menu_items'
@@ -55,6 +61,11 @@ class MenuItem(Record, Base):
     name: Mapped[str]
     base_price: Mapped[int]
     active: Mapped[bool] = mapped_column(default=True)
+    sku: Mapped[str | None] = mapped_column(unique=True)
+    description: Mapped[str] = mapped_column(default='')
+    complimentary: Mapped[bool] = mapped_column(default=False)
+    verification_required: Mapped[bool] = mapped_column(default=False)
+    verification_note: Mapped[str] = mapped_column(default='')
     __table_args__ = (CheckConstraint('base_price >= 0'),)
 
 class ModifierGroup(Record, Base):
@@ -72,6 +83,10 @@ class ModifierOption(Record, Base):
     price: Mapped[int] = mapped_column(default=0)
     is_default: Mapped[bool] = mapped_column(default=False)
     display_order: Mapped[int] = mapped_column(default=0)
+    unit_price: Mapped[int | None]
+    bottles: Mapped[int] = mapped_column(default=0)
+    enabled: Mapped[bool] = mapped_column(default=True)
+    incompatible_with: Mapped[list] = mapped_column(JSON, default=list)
     __table_args__ = (CheckConstraint('price >= 0'),)
 
 class MenuItemModifierGroup(Base):
@@ -101,6 +116,14 @@ class OrderItem(Record, Base):
     unit_price: Mapped[int]
     line_total: Mapped[int]
     status: Mapped[str] = mapped_column(default='DRAFT')
+    sku: Mapped[str | None]
+    category_code: Mapped[str] = mapped_column(default='MAINS')
+    printer_group: Mapped[str] = mapped_column(default='KITCHEN')
+    description: Mapped[str] = mapped_column(default='')
+    variant_name: Mapped[str | None]
+    bottles_per_unit: Mapped[int] = mapped_column(default=0)
+    physical_bottles: Mapped[int] = mapped_column(default=0)
+    notes: Mapped[str] = mapped_column(default='')
     __table_args__ = (CheckConstraint('quantity > 0 AND line_total >= 0'),)
 
 class OrderItemModifier(Record, Base):
@@ -123,7 +146,7 @@ class Payment(Record, Base):
     __table_args__ = (
         Index('ix_payments_created', 'created_at'),
         CheckConstraint("method IN ('CASH','QR','OTHER')"),
-        CheckConstraint('total > 0 AND received >= total AND change = received - total'),
+        CheckConstraint('total >= 0 AND received >= total AND change = received - total'),
     )
 
 class PrinterConfiguration(Record, Base):
@@ -140,8 +163,9 @@ class PrintJob(Record, Base):
     error: Mapped[str | None]
     preview: Mapped[str | None]
     claimed_at: Mapped[str | None]
+    routing_group: Mapped[str] = mapped_column(default='COMBINED')
     __table_args__ = (
-        Index('uq_active_print_batch', 'batch_id', unique=True, sqlite_where=text("status IN ('PENDING','SENDING')")),
+        Index('uq_active_print_batch', 'batch_id', 'routing_group', unique=True, sqlite_where=text("status IN ('PENDING','SENDING')")),
         CheckConstraint("status IN ('PENDING','SENDING','SENT','FAILED','UNKNOWN')"),
     )
 

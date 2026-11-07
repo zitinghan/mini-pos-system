@@ -12,7 +12,7 @@ from app.api.routes import router
 
 logging.basicConfig(level=logging.INFO, format='%(message)s')
 logger = logging.getLogger('keke.api')
-app = FastAPI(title='KEKE WANTAN MEE POS', version='1.0.0',
+app = FastAPI(title='KOKO MINI POS — 可可·南洋咖啡店', version='1.1.0',
     docs_url='/api/docs', openapi_url='/api/openapi.json', redoc_url='/api/redoc')
 origins = [o.strip() for o in os.getenv('CORS_ORIGINS', 'http://localhost:5173').split(',') if o.strip()]
 app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET', 'POST', 'PATCH', 'PUT', 'DELETE'], allow_headers=['Authorization', 'Content-Type', 'Idempotency-Key'])

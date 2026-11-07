@@ -8,8 +8,8 @@ from app.core import config
 from app.core.security import current_user, admin, hash_pin, verify_pin, token_hash
 from app.database.db import transaction
 from app.models.entities import (User, AuthSession, LoginAttempt, RestaurantTable, TableSession, MenuItem, ModifierOption,
-    OrderBatch, OrderItem, OrderItemModifier, Payment, PrintJob, PrinterConfiguration, AuditLog, now)
-from app.schemas.requests import Setup, Credentials, NewUser, NewBatch, NewItem, PriceUpdate, Pay, PrinterSettings
+    OrderBatch, OrderItem, OrderItemModifier, MenuItemModifierGroup, ModifierGroup, Payment, PrintJob, PrinterConfiguration, AuditLog, now)
+from app.schemas.requests import Setup, Credentials, NewUser, NewBatch, NewItem, PriceUpdate, Pay, PrinterSettings, OptionConfiguration
 from app.services import orders
 
 router = APIRouter(prefix='/api')
@@ -20,7 +20,7 @@ def idempotency_key(value: str = Header(alias='Idempotency-Key', min_length=8, m
 
 
 def job_data(job):
-    return {k: getattr(job, k) for k in ('id', 'batch_id', 'status', 'attempts', 'reprint', 'error', 'preview', 'created_at', 'updated_at')}
+    return {k: getattr(job, k) for k in ('id', 'batch_id', 'routing_group', 'status', 'attempts', 'reprint', 'error', 'preview', 'created_at', 'updated_at')}
 
 
 @router.get('/auth/setup-status')
@@ -121,7 +121,8 @@ def tables(user=Depends(current_user)):
             session = db.scalar(select(TableSession).where(TableSession.table_id == table.id, TableSession.status.in_(['OCCUPIED', 'PAYMENT_PENDING'])))
             current = orders.bill(db, session.id) if session else {'total': 0, 'item_count': 0}
             result.append({'id': table.id, 'name': table.name, 'status': session.status if session else 'AVAILABLE',
-                'session_id': session.id if session else None, 'opened_at': session.created_at if session else None,
+                'session_id': session.id if session else None, 'opened_at': session.opened_at if session else None,
+                'first_order_at': session.first_order_at if session else None,
                 'total': current['total'], 'item_count': current['item_count']})
         return result
 
@@ -174,10 +175,45 @@ def update_price(item_id: int, data: PriceUpdate, user=Depends(admin)):
 def update_option(option_id: int, data: PriceUpdate, user=Depends(admin)):
     with transaction() as db:
         option = orders.require(db, ModifierOption, option_id)
-        old = option.price
-        option.price = data.price
+        old = option.unit_price if option.unit_price is not None else option.price
+        if option.unit_price is not None:
+            parent = db.scalar(select(MenuItem).join(MenuItemModifierGroup, MenuItemModifierGroup.item_id == MenuItem.id).where(MenuItemModifierGroup.group_id == option.group_id))
+            if data.price == 0 and not parent.complimentary:
+                raise HTTPException(422, 'Only complimentary items may have a zero price')
+            if parent.complimentary and data.price != 0:
+                raise HTTPException(422, 'Plain water must remain complimentary')
+            option.unit_price = data.price
+        else:
+            group = db.get(ModifierGroup, option.group_id)
+            if group.minimum == 0 and data.price != 0:
+                raise HTTPException(422, 'Complimentary customizations must remain free')
+            option.price = data.price
         db.add(AuditLog(user_id=user['id'], action='MODIFIER_PRICE', details={'option_id': option_id, 'old': old, 'new': data.price}))
-        return {'id': option.id, 'price': option.price}
+        return {'id': option.id, 'price': option.price, 'unit_price': option.unit_price}
+
+
+@router.patch('/menu/options/{option_id}/configuration')
+def configure_option(option_id: int, data: OptionConfiguration, user=Depends(admin)):
+    with transaction() as db:
+        option = orders.require(db, ModifierOption, option_id)
+        group = db.get(ModifierGroup, option.group_id)
+        if group.minimum != 0:
+            raise HTTPException(422, 'Only optional customizations can be configured here')
+        peers = set(db.scalars(select(ModifierOption.id).where(ModifierOption.group_id == option.group_id)))
+        if option.id in data.incompatible_with or not set(data.incompatible_with) <= peers:
+            raise HTTPException(422, 'Conflicts must refer to other customizations of this item')
+        option.enabled, option.incompatible_with = data.enabled, sorted(set(data.incompatible_with))
+        db.add(AuditLog(user_id=user['id'], action='OPTION_CONFIGURATION', details={'option_id': option_id, **data.model_dump()}))
+        return data
+
+
+@router.post('/menu/items/{item_id}/verify')
+def verify_menu_item(item_id: int, user=Depends(admin)):
+    with transaction() as db:
+        item = orders.require(db, MenuItem, item_id)
+        item.verification_required = False
+        db.add(AuditLog(user_id=user['id'], action='MENU_VERIFIED', details={'item_id': item.id}))
+        return {'id': item.id, 'verification_required': False}
 
 
 @router.post('/order-batches', status_code=201)
@@ -206,12 +242,14 @@ def add_item(identity: int, data: NewItem, key: str = Depends(idempotency_key), 
         existing = db.scalar(select(AuditLog).where(AuditLog.action == 'ADD_ITEM', AuditLog.request_key == key))
         if existing:
             expected = {k: v for k, v in existing.details.items() if k != 'item_id'}
+            expected.setdefault('notes', '')  # Reconnect safely across a v1.0 -> v1.1 upgrade.
             if expected != details:
                 raise HTTPException(409, 'Idempotency key reused with different draft item')
             return orders.item_data(db, db.get(OrderItem, existing.details['item_id']))
         source, options, unit = orders.price_item(db, data.menu_item_id, data.quantity, data.option_ids)
         item = OrderItem(batch_id=identity, menu_item_id=source.id, name=source.name, quantity=data.quantity,
-            base_price=source.base_price, unit_price=unit, line_total=unit * data.quantity)
+            base_price=source.base_price, unit_price=unit, line_total=unit * data.quantity, notes=data.notes.strip())
+        orders.snapshot_item(db, item, source, options)
         db.add(item)
         db.flush()
         for option in options:
@@ -323,10 +361,10 @@ def retry(identity: int, key: str = Depends(idempotency_key), user=Depends(admin
         if source.status in ('PENDING', 'SENDING'):
             raise HTTPException(409, 'Job is already queued or sending')
         # New history row; never erase the outcome of a previous attempt.
-        descendants = list(db.scalars(select(PrintJob).where(PrintJob.batch_id == source.batch_id))) if source.batch_id else []
+        descendants = list(db.scalars(select(PrintJob).where(PrintJob.batch_id == source.batch_id, PrintJob.routing_group == source.routing_group))) if source.batch_id else []
         if any(j.status in ('PENDING', 'SENDING') for j in descendants):
             raise HTTPException(409, 'Another attempt for this batch is already queued')
-        job = PrintJob(batch_id=source.batch_id, ticket=source.ticket, reprint=True, attempts=source.attempts)
+        job = PrintJob(batch_id=source.batch_id, routing_group=source.routing_group, ticket=source.ticket, reprint=True, attempts=source.attempts)
         db.add(job)
         db.flush()
         db.add(AuditLog(user_id=user['id'], action='REPRINT', request_key=key, details={'source_job_id': identity, 'new_job_id': job.id, 'previous_status': source.status}))
@@ -336,7 +374,7 @@ def retry(identity: int, key: str = Depends(idempotency_key), user=Depends(admin
 @router.get('/printers/config')
 def printer_config(user=Depends(admin)):
     with transaction() as db:
-        return db.get(PrinterConfiguration, 1).config
+        return PrinterSettings(**db.get(PrinterConfiguration, 1).config).model_dump()
 
 
 @router.put('/printers/config')
@@ -345,9 +383,11 @@ def update_printer(data: PrinterSettings, user=Depends(admin)):
     import codecs
     if data.mode == 'network':
         try:
-            address = ipaddress.ip_address(data.host)
-            if not address.is_private or address.is_loopback or address.is_link_local or address.is_unspecified:
-                raise ValueError()
+            hosts = [data.kitchen_host, data.beverage_host] if data.separate_stations else [data.host]
+            for host in hosts:
+                address = ipaddress.ip_address(host)
+                if not address.is_private or address.is_loopback or address.is_link_local or address.is_unspecified or address.is_multicast:
+                    raise ValueError()
         except ValueError:
             raise HTTPException(422, 'Printer must use a private LAN IP address')
     try:
@@ -363,11 +403,16 @@ def update_printer(data: PrinterSettings, user=Depends(admin)):
 @router.post('/printers/test-print', status_code=201)
 def test_print(user=Depends(admin)):
     with transaction() as db:
-        job = PrintJob(ticket={'table': 'TEST', 'time': now(), 'items': [{'name': '打印测试', 'quantity': 1, 'modifiers': [{'name': '黑酱 / 不辣 / 加面'}]}]})
-        db.add(job)
+        ticket = {'table': 'TEST', 'time': now(), 'order_type': 'NEW', 'items': [
+            {'name': '打印测试', 'quantity': 1, 'printer_group': 'KITCHEN', 'modifiers': [{'name': '黑酱 / 不辣 / 加面'}]},
+            {'name': 'Kopi O', 'quantity': 1, 'printer_group': 'BEVERAGE', 'modifiers': [{'name': '冰 ICED'}]}]}
+        separate = db.get(PrinterConfiguration, 1).config.get('separate_stations', False)
+        jobs = [PrintJob(routing_group=station, ticket={**ticket, 'items': [item for item in ticket['items'] if item['printer_group'] == station]})
+                for station in ('KITCHEN', 'BEVERAGE')] if separate else [PrintJob(ticket=ticket)]
+        db.add_all(jobs)
         db.flush()
-        db.add(AuditLog(user_id=user['id'], action='TEST_PRINT', details={'job_id': job.id}))
-        return job_data(job)
+        db.add(AuditLog(user_id=user['id'], action='TEST_PRINT', details={'job_ids': [job.id for job in jobs]}))
+        return {**job_data(jobs[0]), 'print_jobs': [job_data(job) for job in jobs]}
 
 
 def day_payments(db, day):
@@ -382,8 +427,24 @@ def daily_sales(day: date | None = None, user=Depends(admin)):
     day = day or datetime.now(ZoneInfo('Asia/Kuala_Lumpur')).date()
     with transaction() as db:
         payments = day_payments(db, day)
-        return {'date': day.isoformat(), 'timezone': 'Asia/Kuala_Lumpur', 'total': sum(p.total for p in payments),
-            'transactions': len(payments), 'methods': {method: sum(p.total for p in payments if p.method == method) for method in ('CASH', 'QR', 'OTHER')}}
+        sessions = [db.get(TableSession, payment.session_id) for payment in payments]
+        durations = [value for session in sessions if (value := orders.dining_duration(session)) is not None]
+        breakdown = {code: 0 for code in ('MAINS', 'SNACKS', 'DRINKS', 'BEER')}
+        bottles, beer_units = 0, 0
+        for payment in payments:
+            for item in orders.bill(db, payment.session_id)['items']:
+                breakdown[item['category_code']] = breakdown.get(item['category_code'], 0) + item['line_total']
+                bottles += item['physical_bottles']
+                if item['category_code'] == 'BEER':
+                    beer_units += item['quantity']
+        total = sum(p.total for p in payments)
+        return {'date': day.isoformat(), 'timezone': 'Asia/Kuala_Lumpur', 'total': total,
+            'transactions': len(payments), 'completed_sessions': len(payments), 'category_sales': breakdown,
+            'average_spending': (total + len(payments) // 2) // len(payments) if payments else 0,
+            'dining_duration': {'count': len(durations), 'average_seconds': sum(durations) / len(durations) if durations else None,
+                'minimum_seconds': min(durations) if durations else None, 'maximum_seconds': max(durations) if durations else None},
+            'beer_units': beer_units, 'beer_bottles': bottles,
+            'methods': {method: sum(p.total for p in payments if p.method == method) for method in ('CASH', 'QR', 'OTHER')}}
 
 
 @router.get('/reports/transactions')

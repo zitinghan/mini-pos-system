@@ -27,8 +27,12 @@ def run_once():
         if not job:
             return False
         job.status, job.claimed_at, job.attempts = 'SENDING', now(), job.attempts + 1
-        identity, ticket, reprint = job.id, job.ticket, job.reprint
+        identity, ticket, reprint = job.id, {**job.ticket, 'ticket_number': job.id}, job.reprint
         config = db.get(PrinterConfiguration, 1).config.copy()
+        if job.routing_group in ('KITCHEN', 'BEVERAGE'):
+            station = job.routing_group.lower()
+            config['host'] = config.get(f'{station}_host') or config.get('host', '')
+            config['port'] = config.get(f'{station}_port', config.get('port', 9100))
     # Connection, rendering and all writes happen after the claim transaction commits.
     status, error, preview = 'SENT', None, None
     connection = None
