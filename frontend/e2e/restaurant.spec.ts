@@ -1,5 +1,59 @@
 import { test, expect } from '@playwright/test';
 
+test('paid-first methods can be selected and edited after ordering without recording a payment',async({page},info)=>{
+  await page.goto('/');
+  const required=(await (await page.request.get('/api/auth/setup-status')).json()).setup_required;
+  await page.getByLabel('员工名称').fill('browser-owner');
+  await page.getByLabel(required?'设置 6–12 位数字 PIN':'PIN 码').fill('928461');
+  if(required)await page.getByLabel('服务器设置令牌').fill('isolated-browser-test-setup-token');
+  await page.getByRole('button',{name:required?'创建管理员并登录':'登录',exact:true}).click();
+  await expect(page.getByRole('heading',{name:'选择桌台',exact:true})).toBeVisible();
+  const token=await page.evaluate(()=>sessionStorage.getItem('koko-token'));
+  const headers={Authorization:`Bearer ${token}`};
+  const before=await (await page.request.get('/api/reports/daily-sales',{headers})).json();
+  const table={'android-360':'T17','android-390':'T18','android-412':'T19'}[info.project.name]!;
+  await page.getByRole('button',{name:new RegExp(`^${table}`)}).click();
+  await expect(page.getByRole('heading',{name:`${table} 点餐`,exact:true})).toBeVisible();
+  const sessionId=page.url().split('/').pop();
+  await page.getByRole('button',{name:/^云吞面 RM/}).click();
+  await page.getByRole('button',{name:'加入草稿 · RM 8.00'}).click();
+  await page.getByLabel('本轮已付款（仅手动标记）').check();
+  await expect(page.getByLabel('本轮付款方式')).toHaveValue('QR');
+  await page.getByLabel('本轮付款方式').selectOption('CASH');
+  await page.getByRole('button',{name:'确认下单 / 送档口'}).click();
+  await page.getByRole('button',{name:new RegExp(`^${table}`)}).click();
+  await expect(page.getByText('· 现金',{exact:true})).toBeVisible();
+  const edit=async(method:'QR'|'OTHER'|null)=>{
+    await page.getByRole('button',{name:'修改本轮备注 / 付款标记',exact:true}).click();
+    const dialog=page.getByRole('dialog',{name:'修改整单备注'});
+    if(method){
+      await dialog.getByLabel('本轮已付款（仅手动标记）').check();
+      await dialog.getByLabel('本轮付款方式').selectOption(method);
+    }else await dialog.getByLabel('本轮已付款（仅手动标记）').uncheck();
+    await dialog.getByRole('button',{name:'保存备注 / 标记'}).click();
+    await expect(dialog).toHaveCount(0);
+  };
+  await edit('QR');
+  await expect(page.getByText('· 二维码',{exact:true})).toBeVisible();
+  await edit('OTHER');
+  await expect(page.getByText('· 其他',{exact:true})).toBeVisible();
+  await edit(null);
+  await expect(page.getByText('已付款（手动标记）',{exact:true})).toHaveCount(0);
+  await edit('OTHER');
+  const bill=await (await page.request.get(`/api/table-sessions/${sessionId}/bill`,{headers})).json();
+  expect(bill.prepaid_rounds[0].method).toBe('OTHER');
+  expect((await (await page.request.get('/api/reports/daily-sales',{headers})).json()).total).toBe(before.total);
+  const jobs=await (await page.request.get('/api/print-jobs',{headers})).json();
+  const current=jobs.filter((job:{session_id:number})=>job.session_id===Number(sessionId));
+  expect(current.find((job:{order_type:string})=>job.order_type==='NEW').prepaid_method).toBe('CASH');
+  await page.screenshot({path:info.outputPath('editable-paid-method.png'),fullPage:true});
+  await page.getByRole('button',{name:'查看账单 / 收款'}).click();
+  await expect(page.getByText(/已付款标记：其他/)).toBeVisible();
+  await page.getByRole('button',{name:'其他',exact:true}).click();
+  await page.getByRole('button',{name:'确认收款并清台'}).click();
+  await expect(page.getByRole('article',{name:'客户收据'})).toContainText('其他');
+});
+
 test('kueh takeaway soup separation is optional free and retained on the receipt',async({page})=>{
   await page.goto('/');
   const required=(await (await page.request.get('/api/auth/setup-status')).json()).setup_required;

@@ -121,6 +121,7 @@ class OrderBatch(Record, Base):
     submitted_at: Mapped[str | None]
     notes: Mapped[str] = mapped_column(default='')
     prepaid_label: Mapped[bool] = mapped_column(default=False)
+    prepaid_method: Mapped[str | None]
     info_revision: Mapped[int] = mapped_column(default=1)
     __table_args__ = (
         Index('uq_user_draft', 'session_id', 'user_id', unique=True, sqlite_where=text("status = 'DRAFT'")),

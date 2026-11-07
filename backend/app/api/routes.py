@@ -380,7 +380,8 @@ def cancel_draft(identity: int, user=Depends(current_user)):
 @router.post('/order-batches/{identity}/submit')
 def submit(identity: int, data: SubmitBatch | None = None, key: str = Depends(idempotency_key), user=Depends(current_user)):
     with transaction() as db:
-        return orders.submit(db, identity, key, user, data.notes if data else None, data.prepaid_label if data else None)
+        return orders.submit(db, identity, key, user, data.notes if data else None, data.prepaid_label if data else None,
+            data.prepaid_method if data else None, bool(data and 'prepaid_method' in data.model_fields_set))
 
 
 @router.get('/table-sessions/{identity}/orders')

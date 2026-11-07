@@ -23,6 +23,11 @@ def strike_from(lines, start):
         lines[index] = (StyledText(text, strike=True), size)
 
 
+def prepaid_description(ticket):
+    method = {'CASH':'现金 CASH','QR':'二维码 QR','OTHER':'其他 OTHER'}.get(ticket.get('prepaid_method'))
+    return f"已付款（手动标记） · {method}" if method else '已付款（手动标记）'
+
+
 def ticket_lines(ticket, reprint=False):
     if ticket.get('kind') == 'RECEIPT':
         return receipt_lines(ticket, reprint)
@@ -45,10 +50,10 @@ def ticket_lines(ticket, reprint=False):
             lines.append((f"整桌备注 {ticket.get('table_notes') or '（已清除）'}", 36))
         else:
             lines.append((f"本轮备注 {ticket.get('notes') or '（已清除）'}", 36))
-            lines.append(('本轮已付款（手动标记）' if ticket.get('prepaid_label') else '本轮未标记先付款', 36))
+            lines.append((f"本轮{prepaid_description(ticket)}" if ticket.get('prepaid_label') else '本轮未标记先付款', 36))
         return lines
     if ticket.get('prepaid_label'):
-        lines.append(('已付款（手动标记）', 36))
+        lines.append((prepaid_description(ticket), 36))
     if ticket.get('table_notes'):
         lines.append((f"整桌备注 {ticket['table_notes']}", 36))
     if ticket.get('notes'):

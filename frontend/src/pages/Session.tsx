@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, requestKey, clearKey } from '../services/api';
-import type { MenuItem, Batch, Bill, CategoryCode, Line, CustomItemInput } from '../services/types';
+import type { MenuItem, Batch, Bill, CategoryCode, Line, CustomItemInput, PaymentMethod } from '../services/types';
 import CustomItemForm from '../components/CustomItemForm';
 import { useAuth } from '../stores/auth';
 import { useUI } from '../stores/ui';
@@ -15,6 +15,13 @@ interface PickerProps {
   onAdd: (quantity: number, ids: number[], notes?: string, unitPrice?: number) => void;
   busy: boolean;
   initial?: Line;
+}
+
+function PrepaidMethod({value,onChange}:{value:PaymentMethod|null;onChange:(method:PaymentMethod|null)=>void}) {
+  return <label>本轮付款方式<select value={value??''} onChange={(event)=>onChange((event.target.value||null) as PaymentMethod|null)}>
+    {value===null&&<option value="">未记录（可选择）</option>}
+    <option value="QR">QR</option><option value="CASH">现金 Cash</option><option value="OTHER">其他 Other</option>
+  </select></label>;
 }
 
 function startingPrice(item: MenuItem) {
@@ -139,10 +146,12 @@ export default function Session() {
   const [editing, setEditing] = useState<{ line: Line; batchId: number } | null>(null);
   const [orderNotes, setOrderNotes] = useState<string | null>(null);
   const [draftPaid, setDraftPaid] = useState<boolean | null>(null);
+  const [draftMethod, setDraftMethod] = useState<PaymentMethod | null>(null);
   const [tableNotes, setTableNotes] = useState<string | null>(null);
   const [roundDetails, setRoundDetails] = useState<Batch | null>(null);
   const [roundNotes, setRoundNotes] = useState('');
   const [roundPaid, setRoundPaid] = useState(false);
+  const [roundMethod, setRoundMethod] = useState<PaymentMethod | null>(null);
   const [cancelTarget, setCancelTarget] = useState<{kind:'ITEM';line:Line;batchId:number} | {kind:'TABLE';bill:Bill} | null>(null);
   const [cancelReason, setCancelReason] = useState('顾客取消');
   const bill = useQuery({
@@ -169,7 +178,7 @@ export default function Session() {
   const unavailableDrafts = drafts.filter((item) => menu.data?.some((entry) => entry.id === item.menu_item_id && entry.sold_out));
   const currentChosen = chosen ? menu.data?.find((item) => item.id === chosen.id) ?? chosen : null;
   const editingMenu = editing ? menu.data?.find((item) => item.id === editing.line.menu_item_id) : null;
-  useEffect(() => { setOrderNotes(null); setDraftPaid(null); }, [ownDraft?.id]);
+  useEffect(() => { setOrderNotes(null); setDraftPaid(null); setDraftMethod(null); }, [ownDraft?.id]);
 
   const saveTableNotes = useMutation({
     mutationFn: async () => {
@@ -183,7 +192,7 @@ export default function Session() {
   const saveRoundDetails = useMutation({
     mutationFn: async () => {
       if (!roundDetails) throw new Error('请选择订单');
-      const payload = { notes: roundNotes, prepaid_label: roundPaid, expected_revision: roundDetails.info_revision ?? 1 };
+      const payload = { notes: roundNotes, prepaid_label: roundPaid, prepaid_method: roundPaid ? roundMethod : null, expected_revision: roundDetails.info_revision ?? 1 };
       const scope = `batch-details:${roundDetails.id}:${JSON.stringify(payload)}`;
       const result = await api(`/order-batches/${roundDetails.id}/details`, 'PATCH', payload, requestKey(scope));
       clearKey(scope); return result;
@@ -278,7 +287,8 @@ export default function Session() {
     mutationFn: async () => {
       if (!ownDraft) throw new Error('草稿不存在');
       if (tableNotes !== null && tableNotes !== (bill.data?.table_notes ?? '')) await saveTableNotes.mutateAsync();
-      const payload = { notes: orderNotes ?? ownDraft.notes ?? '', prepaid_label: draftPaid ?? ownDraft.prepaid_label ?? false };
+      const paid = draftPaid ?? ownDraft.prepaid_label ?? false;
+      const payload = { notes: orderNotes ?? ownDraft.notes ?? '', prepaid_label: paid, prepaid_method: paid ? draftMethod ?? ownDraft.prepaid_method ?? 'QR' : null };
       const scope = `submit:${ownDraft.id}:${JSON.stringify(payload)}`;
       const result = await api<{ batch_id: number; status?:string; print_job_id: number; print_jobs?: {id:number;routing_group:string}[] }>(
         `/order-batches/${ownDraft.id}/submit`, 'POST', payload, requestKey(scope),
@@ -389,6 +399,7 @@ export default function Session() {
             onChange={(event) => setOrderNotes(event.target.value)} placeholder="例如：一起上菜、先出饮料" /></label>
           <label className="check"><input type="checkbox" checked={draftPaid ?? ownDraft.prepaid_label ?? false}
             onChange={(event) => setDraftPaid(event.target.checked)} />本轮已付款（仅手动标记）</label>
+          {(draftPaid ?? ownDraft.prepaid_label ?? false)&&<PrepaidMethod value={draftMethod ?? ownDraft.prepaid_method ?? 'QR'} onChange={setDraftMethod}/>}
           <small>只作订单提示，不登记收款或自动清台；下一轮默认不标记。</small>
           <small>价格以确认下单时菜单为准。</small>
           {unavailableDrafts.length > 0 && <p className="warning" role="alert">{unavailableDrafts.map((item) => item.name).join('、')} 已售罄，请先移除或等待恢复供应。</p>}
@@ -404,10 +415,11 @@ export default function Session() {
         {batches.data?.filter((batch) => batch.status !== 'DRAFT').map((batch) => (
           <div key={batch.id}>
             <p className="batch-heading">#{batch.id} · {label(batch.status)}</p>
-            {batch.prepaid_label && <strong className="pill">已付款（手动标记）</strong>}
+            {batch.prepaid_label && <strong className="pill"><span>已付款（手动标记）</span>{batch.prepaid_method&&<span> · {label(batch.prepaid_method)}</span>}</strong>}
             {batch.notes && <p className="order-notes">整单备注：{batch.notes}</p>}
             {active && batch.status === 'SUBMITTED' && <button className="quiet" onClick={() => {
               saveRoundDetails.reset(); setRoundDetails(batch); setRoundNotes(batch.notes ?? ''); setRoundPaid(batch.prepaid_label ?? false);
+              setRoundMethod(batch.prepaid_method ?? (batch.prepaid_label ? null : 'QR'));
             }}>修改本轮备注 / 付款标记</button>}
             <Lines items={batch.items} onEdit={active && batch.status === 'SUBMITTED' && !edit.isPending && !saveCustom.isPending && !cancelOrder.isPending ? (line) => startEdit(line, batch.id) : undefined}
               onCancel={active && batch.status === 'SUBMITTED' && !edit.isPending && !saveCustom.isPending && !cancelOrder.isPending ? (line) => startCancelItem(line, batch.id) : undefined} />
@@ -455,7 +467,10 @@ export default function Session() {
       {roundDetails && <div className="modal" role="dialog" aria-modal="true" aria-label="修改整单备注" onClick={(event) => { if (event.target === event.currentTarget) setRoundDetails(null); }}>
         <div className="card stack"><h2>订单 #{roundDetails.id} · 备注 / 标记</h2>
           <label>本轮备注<textarea maxLength={500} rows={3} value={roundNotes} onChange={(event) => setRoundNotes(event.target.value)} /></label>
-          <label className="check"><input type="checkbox" checked={roundPaid} onChange={(event) => setRoundPaid(event.target.checked)} />本轮已付款（仅手动标记）</label>
+          <label className="check"><input type="checkbox" checked={roundPaid} onChange={(event) => {
+            setRoundPaid(event.target.checked); if(event.target.checked&&roundMethod===null)setRoundMethod('QR');
+          }} />本轮已付款（仅手动标记）</label>
+          {roundPaid&&<PrepaidMethod value={roundMethod} onChange={setRoundMethod}/>}
           <small>不会生成收款记录，也不会重复下单。</small><ErrorBox error={saveRoundDetails.error} />
           <button className="primary" disabled={saveRoundDetails.isPending} onClick={() => saveRoundDetails.mutate()}>保存备注 / 标记</button>
           <button onClick={() => setRoundDetails(null)}>返回</button>

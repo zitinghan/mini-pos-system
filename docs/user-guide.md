@@ -19,6 +19,8 @@ After more than 45 minutes from the first submitted order, the table's time beco
 
 For a customer who cancels after waiting, use 取消此项 beside the food, or 取消整桌 to cancel all remaining unpaid food/drafts and release the table. Select 等候太久 and confirm. The appropriate stalls get cancellation notices; original records remain available. Edit 整桌备注 at any time before payment, or use 修改本轮备注 / 付款标记 for a specific round. 本轮已付款（仅手动标记） is only a label and does not record revenue or release the table. See [table controls and new menu choices](table-controls.md).
 
+When 本轮已付款 is checked, 本轮付款方式 offers QR, 现金 Cash and 其他 Other (new rounds default to QR). After ordering, open that table's 修改本轮备注 / 付款标记 to change the flag or method. Clearing the flag clears its method; later ordering rounds do not inherit either. Saved changes notify relevant stalls without adding food, and the selected method appears on that round, its tickets and cashier/history hints. Older labels with no recorded method stay 未记录 until staff chooses one. These are manual hints; select the actual payment method when completing cashier checkout.
+
 整桌备注（所有轮次） is at the bottom of the ordering page, after the bill and any other staff drafts. 小吃 also includes 云吞汤 (10粒, RM8); quantity/takeaway are available and it routes to the noodle stall.
 
 面粉粿 / 面粉糕 offers **汤分开** under 打包设置 only after choosing 打包. It is optional, not selected automatically and has no surcharge. Returning to 堂食 clears it. The selection appears on cart, preparation tickets and receipts; ordinary/large/egg pricing remains unchanged.

@@ -28,6 +28,10 @@ For existing submitted food, these changes send a **备注 / 标记更新** noti
 
 ## Manual paid-first label
 
+Paid-first round labels now carry an optional `prepaid_method` (CASH/QR/OTHER). Draft submission exposes a method selector after checking the flag; new selections default to QR. Submitted unpaid rounds can edit the flag and method with the existing round-details editor. Method-only changes advance the info revision and create NOTE notifications with no food rows. Clearing the flag clears its method; add-on rounds start unmarked with no method. Original submit/print snapshots are retained and later edits are audited.
+
+Migration `0011_prepaid_method` adds one nullable column to order batches; it does not infer methods for historical labels or create payments. Legacy details requests omitting the field preserve an existing method, and original idempotency hashes remain valid. New requests can explicitly clear an unknown method. Cashier/history hints list marked rounds and their methods, but the final cashier Payment method remains separately selected and authoritative.
+
 Check **本轮已付款（仅手动标记）** when submitting a round, or edit it later using 修改本轮备注 / 付款标记. It prints **已付款（手动标记）** and appears on the round/order card. It does not create a Payment, change daily revenue, clear the table or hide an uncompleted preparation order. Add-on rounds default to unmarked; earlier labels are not copied to later food.
 
 At cashier checkout, the screen reminds staff to check previously collected funds and avoid collecting twice. Complete the existing cashier record when settling the table. If cancelling an order that was manually marked paid, handle any funds already collected outside this label; cancellation does not automatically register a payment/refund.
@@ -59,6 +63,8 @@ Cashier receipts now default to **no paper**. The payment transaction still save
 Migration `0007_table_controls` adds table remarks/revisions, round paid-label/revision fields, cancellation reasons and session links on print jobs. Old print-job session links are backfilled from their batch/payment, without changing original payloads, delivery status or amounts. Idempotent seeding adds only missing 面粉粿 portions and canned brand choices. Existing menu prices, stock, promotions, paid history and printer configuration are preserved.
 
 ## Verification
+
+Editable paid-first methods: all 258 backend tests, 42 frontend tests, the production build and 9 Android browser cases passed. Checks cover Cash/QR/Other selection, edits after submission, clearing flags/methods, unknown legacy methods, no ledger entry before real checkout, unchanged original print snapshots, NOTE-only updates, concurrency/idempotency and independent add-on rounds. A twice-run migration/seed on a current database copy preserved every original record/setting and left historical methods null.
 
 汤分开 update: 94 focused backend cases (menu pricing, takeaway rules and submitted-item edits), all 40 frontend tests, the production build and 3 Android browser cases passed. Verification includes RM8/9/10/11 pricing, omitted legacy choices, rejecting soup separation without takeaway, switching back to dine-in, correction strike-through and receipt snapshots. Repeated seed on a backup preserves every original record/setting and adds exactly one group, one option and their item link.
 

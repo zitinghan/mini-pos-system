@@ -126,7 +126,7 @@ def item_data(db, item):
 
 def batches(db, session_id):
     return [{'id': b.id, 'status': b.status, 'created_at': b.created_at, 'submitted_at': b.submitted_at, 'notes': b.notes,
-             'prepaid_label': b.prepaid_label, 'info_revision': b.info_revision,
+             'prepaid_label': b.prepaid_label, 'prepaid_method': b.prepaid_method, 'info_revision': b.info_revision,
              'user_id': b.user_id,
              'items': [item_data(db, i) for i in db.scalars(select(OrderItem).where(OrderItem.batch_id == b.id).order_by(OrderItem.id))]}
         for b in db.scalars(select(OrderBatch).where(OrderBatch.session_id == session_id).order_by(OrderBatch.id))]
@@ -143,11 +143,12 @@ def bill(db, session_id):
     prior_payment = db.get(Payment, recovery.payment_id) if recovery else None
     item_snapshots = [item_data(db, item) for item in items]
     token = hashlib.sha256(json.dumps({'status': session.status, 'notes': session.notes, 'revision': session.metadata_revision,
-        'batches': [(row.id, row.status, row.info_revision, row.notes, row.prepaid_label) for row in batch_rows],
+        'batches': [(row.id, row.status, row.info_revision, row.notes, row.prepaid_label, row.prepaid_method) for row in batch_rows],
         'items': [(row.id, row.status, row.revision, row.quantity, row.line_total) for row in all_rows]}, sort_keys=True).encode()).hexdigest()
     return {'session_id': session.id, 'table': require(db, RestaurantTable, session.table_id).name,
         'table_notes': session.notes, 'metadata_revision': session.metadata_revision, 'change_token': token,
         'has_prepaid_label': labelled,
+        'prepaid_rounds': [{'batch_id':row.id,'method':row.prepaid_method} for row in active_batches if row.prepaid_label],
         'prepaid_label_status': ('ALL' if all(row.prepaid_label for row in active_batches) else 'PARTIAL') if labelled else None,
         'recovery_offer': {'original_total': prior_payment.original_total if prior_payment.original_total is not None else sum(i.line_total for i in items),
             'total': prior_payment.total, 'offer_reason': prior_payment.offer_reason} if prior_payment else None,
@@ -171,7 +172,7 @@ def editable_batch(db, identity, user):
     return batch
 
 
-def submit(db, identity, key, user, notes=None, prepaid_label=None):
+def submit(db, identity, key, user, notes=None, prepaid_label=None, prepaid_method=None, method_provided=False):
     batch = require(db, OrderBatch, identity)
     if batch.user_id != user['id'] and user['role'] != 'ADMIN':
         raise HTTPException(403, 'This draft belongs to another staff member')
@@ -182,16 +183,23 @@ def submit(db, identity, key, user, notes=None, prepaid_label=None):
         original = db.scalar(select(AuditLog).where(AuditLog.action == 'SUBMIT_BATCH', AuditLog.request_key == key))
         original_notes = original.details['notes'] if original else previous.notes
         original_label = original.details['prepaid_label'] if original else previous.prepaid_label
+        original_method = original.details.get('prepaid_method') if original else previous.prepaid_method
         if notes is not None and notes.strip() != original_notes:
             raise HTTPException(409, 'Idempotency key reused with different order notes')
         if prepaid_label is not None and prepaid_label != original_label:
             raise HTTPException(409, 'Idempotency key reused with different paid label')
+        if method_provided and (prepaid_method if original_label else None) != original_method:
+            raise HTTPException(409, 'Idempotency key reused with different paid method')
         return submission_result(db, previous)
     editable_batch(db, identity, user)
     if notes is not None:
         batch.notes = notes.strip()
     if prepaid_label is not None:
         batch.prepaid_label = prepaid_label
+    if method_provided:
+        batch.prepaid_method = prepaid_method
+    if not batch.prepaid_label:
+        batch.prepaid_method = None
     if active_session(db, batch.session_id).status == 'PAYMENT_PENDING':
         raise HTTPException(409, 'Checkout in progress; cashier must resume ordering first')
     items = list(db.scalars(select(OrderItem).where(OrderItem.batch_id == identity, OrderItem.status == 'DRAFT')))
@@ -222,14 +230,14 @@ def submit(db, identity, key, user, notes=None, prepaid_label=None):
     session.status = 'OCCUPIED'
     ticket = {'table': require(db, RestaurantTable, session.table_id).name, 'batch_id': batch.id,
         'time': batch.submitted_at, 'order_type': order_type, 'restaurant': '可可·南洋咖啡店', 'notes': batch.notes,
-        'table_notes': session.notes, 'prepaid_label': batch.prepaid_label,
+        'table_notes': session.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method,
         'items': [item_data(db, i) for i in items]}
     for station, _ in STATIONS:
         station_items = [item for item in ticket['items'] if item['printer_group'] == station]
         if station_items:
             db.add(PrintJob(batch_id=batch.id, session_id=session.id, routing_group=station, ticket={**ticket, 'items': station_items}))
     db.add(AuditLog(user_id=user['id'], action='SUBMIT_BATCH', request_key=key,
-        details={'batch_id': batch.id, 'notes': batch.notes, 'prepaid_label': batch.prepaid_label}))
+        details={'batch_id': batch.id, 'notes': batch.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method}))
     db.flush()
     return submission_result(db, batch)
 

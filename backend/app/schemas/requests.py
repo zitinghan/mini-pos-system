@@ -25,6 +25,7 @@ class NewBatch(StrictModel):
 class SubmitBatch(StrictModel):
     notes: str | None = Field(default=None, max_length=500)
     prepaid_label: bool | None = None
+    prepaid_method: Literal['CASH', 'QR', 'OTHER'] | None = None
 
 class CancelItem(StrictModel):
     expected_revision: int = Field(ge=1)
@@ -44,6 +45,7 @@ class TableNotes(StrictModel):
 
 class BatchDetails(TableNotes):
     prepaid_label: bool
+    prepaid_method: Literal['CASH', 'QR', 'OTHER'] | None = None
 
 class NewItem(StrictModel):
     menu_item_id: int = Field(gt=0)

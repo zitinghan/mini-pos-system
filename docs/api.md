@@ -24,14 +24,14 @@ Success responses are typed objects or lists; HTTP errors use `{"detail":"messag
 | PATCH | `/order-batches/{id}/custom-items/{item_id}` | Unpaid custom item; same fields plus expected_revision and Idempotency-Key. Submitted category/stall cannot change |
 | PATCH | `/order-batches/{id}/items/{item_id}` | Unpaid item edit; private drafts owner/admin; revision, expected unit price and Idempotency-Key required |
 | POST | `/order-batches/{id}/items/{item_id}/cancel` | Cancel unpaid item; expected item revision, reason and Idempotency-Key |
-| PATCH | `/order-batches/{id}/details` | Edit unpaid round notes/manual paid label; expected info revision and Idempotency-Key |
+| PATCH | `/order-batches/{id}/details` | Edit unpaid round notes/manual paid label and optional prepaid_method CASH/QR/OTHER; expected info revision and Idempotency-Key. Unmarking clears method; omitted method preserves existing |
 | PATCH | `/table-sessions/{id}/notes` | Edit open table remarks; expected metadata revision and Idempotency-Key |
 | POST | `/table-sessions/{id}/cancel` | Cancel unpaid table and drafts; expected bill change token, reason and Idempotency-Key |
 | GET | `/table-recovery` | Admin; latest 100 closed sessions, recoverable item preview, expected_change_token and conflict explanation |
 | POST | `/table-sessions/{id}/restore` | Admin; expected_change_token, reason, Idempotency-Key. Restore cancelled snapshots or reverse a mistaken payment and create an unpaid session; no external refund |
 | DELETE | `/order-batches/{id}/items/{item_id}` | Owner/admin; cancel draft line only |
 | DELETE | `/order-batches/{id}` | Owner/admin; cancel draft |
-| POST | `/order-batches/{id}/submit` | Owner/admin; optional `{"notes":"整单备注"}` body; Idempotency-Key required; atomically save/queue |
+| POST | `/order-batches/{id}/submit` | Owner/admin; optional notes, prepaid_label and prepaid_method (CASH/QR/OTHER) body; Idempotency-Key required; atomically save/queue |
 | GET | `/table-sessions/{id}/orders`, `/table-sessions/{id}/bill` | Staff; batches and authoritative submitted bill |
 | POST | `/table-sessions/{id}/checkout`, `/table-sessions/{id}/resume` | Admin; set/clear ordering pause |
 | POST | `/table-sessions/{id}/close-empty` | Admin; cancel empty session and drafts |

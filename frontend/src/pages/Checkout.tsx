@@ -4,6 +4,7 @@ import { useMutation, useQuery } from '@tanstack/react-query';
 import { api, requestKey } from '../services/api';
 import type { Bill, Payment } from '../services/types';
 import { money, parseSen } from '../utils/format';
+import { label } from '../utils/i18n';
 import { Lines, ErrorBox, Loading } from '../components/Common';
 import { useUI } from '../stores/ui';
 
@@ -87,6 +88,7 @@ export default function Checkout() {
       {restoredOffer&&<p className="notice">此桌由误收款恢复，原收款已撤销。请重新核对金额及优惠后收款。</p>}
       {displayUnavailable && <p className="warning">顾客显示屏暂时无法连接，仍可正常收款。</p>}
       {bill.data?.has_prepaid_label && <p className="warning">部分订单已手动标记先付款，请核实已收款项，避免重复收款。此处仍需完成收银记录。</p>}
+      {bill.data?.prepaid_rounds?.map((round)=><p className="muted" key={round.batch_id}>订单 #{round.batch_id} · 已付款标记：{round.method?label(round.method):'方式未记录'}</p>)}
       {bill.data?.status === 'OCCUPIED' && <p className="notice" role="status">
         此桌已恢复点餐，请返回订单页面重新核对账单并开始结账。
       </p>}

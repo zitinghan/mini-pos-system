@@ -14,6 +14,7 @@ def build(db, payment):
         'currency': 'MYR', 'items': current['items'], 'order_notes': current['order_notes'], 'table_notes': current['table_notes'], 'total': payment.total,
         'original_total': payment.original_total if payment.original_total is not None else payment.total,
         'offer_reason': payment.offer_reason,
+        'prepaid_rounds': current['prepaid_rounds'],
         'received': payment.received, 'change': payment.change, 'method': payment.method,
         'dining_duration_seconds': current['dining_duration_seconds']}
 

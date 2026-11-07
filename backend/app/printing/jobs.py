@@ -5,4 +5,4 @@ def job_data(job):
         'document_type': job.ticket.get('kind', 'KITCHEN'),
         'table': job.ticket.get('table'), 'order_type': job.ticket.get('order_type', 'NEW'),
         'notes': job.ticket.get('notes', ''), 'table_notes': job.ticket.get('table_notes', ''),
-        'prepaid_label': job.ticket.get('prepaid_label', False), 'reason': job.ticket.get('reason', '')}
+        'prepaid_label': job.ticket.get('prepaid_label', False), 'prepaid_method': job.ticket.get('prepaid_method'), 'reason': job.ticket.get('reason', '')}

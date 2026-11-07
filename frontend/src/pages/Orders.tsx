@@ -62,7 +62,7 @@ export default function Orders() {
       {job.order_type === 'CANCEL' && <strong className="warning">取消单 · 停止制作 / 不要出餐</strong>}
       {job.order_type === 'NOTE' && <strong className="notice">备注 / 标记更新 · 不新增餐点</strong>}
       {job.order_type === 'RESTORE' && <strong className="notice">恢复单 · 取消作废，请核对原单，已制作请勿重复</strong>}
-      {job.prepaid_label && <strong className="pill">已付款（手动标记）</strong>}
+      {job.prepaid_label && <strong className="pill"><span>已付款（手动标记）</span>{job.prepaid_method&&<span> · {label(job.prepaid_method)}</span>}</strong>}
       {job.reason && <p>{job.order_type === 'RESTORE' ? '恢复原因' : '取消原因'}：{job.reason}</p>}
       {job.table_notes && <p className="order-notes">整桌备注：{job.table_notes}</p>}
       {job.notes && <p className="order-notes">整单备注：{job.notes}</p>}
