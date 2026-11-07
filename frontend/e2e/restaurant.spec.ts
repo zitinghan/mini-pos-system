@@ -13,6 +13,12 @@ test('first order, incremental kitchen ticket, cash payment and history', async 
   const tableName = { 'android-360': 'T05', 'android-390': 'T06', 'android-412': 'T07' }[info.project.name]!;
   await page.getByRole('button', { name: new RegExp(tableName) }).click();
   await page.getByRole('button', { name: /云吞面/ }).click();
+  await expect(page.getByRole('heading', { name: '云吞面', exact: true })).toBeInViewport({ ratio: 1 });
+  await expect.poll(() => page.getByRole('heading', { name: '云吞面', exact: true }).evaluate((heading) => heading.getBoundingClientRect().top)).toBeLessThan(100);
+  // Selecting the same dish again must also bring its options back into view.
+  await page.getByRole('button', { name: /云吞面/ }).click();
+  await expect(page.getByRole('heading', { name: '云吞面', exact: true })).toBeInViewport({ ratio: 1 });
+  await expect.poll(() => page.getByRole('heading', { name: '云吞面', exact: true }).evaluate((heading) => heading.getBoundingClientRect().top)).toBeLessThan(100);
   await page.getByRole('button', { name: '辣', exact: true }).click();
   await page.getByRole('button', { name: /加面/ }).click();
   await page.getByRole('button', { name: '增加数量' }).click();

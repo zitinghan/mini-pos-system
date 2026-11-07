@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api, requestKey, clearKey } from '../services/api';
@@ -106,6 +106,7 @@ export default function Session() {
   const navigate = useNavigate();
   const user = useAuth((state) => state.user);
   const [chosen, setChosen] = useState<MenuItem | null>(null);
+  const optionsRef = useRef<HTMLDivElement>(null);
   const [category, setCategory] = useState<CategoryCode>('MAINS');
   const [error, setError] = useState<unknown>(null);
   const bill = useQuery({
@@ -202,6 +203,10 @@ export default function Session() {
     if (bill.data?.status === 'PAID') setChosen(null);
   }, [bill.data?.status]);
 
+  useEffect(() => {
+    if (chosen) optionsRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+  }, [chosen]);
+
   if (bill.isPending || batches.isPending || menu.isPending) {
     return <><Loading /><ErrorBox error={bill.error || batches.error || menu.error} /></>;
   }
@@ -234,11 +239,14 @@ export default function Session() {
         </div>
         <div className="food-grid">
           {menu.data?.filter((item) => (item.category_code ?? 'MAINS') === category).map((item) => (
-            <MenuItemButton key={item.id} item={item} selected={chosen?.id === item.id} onSelect={setChosen} />
+            <MenuItemButton key={item.id} item={item} selected={chosen?.id === item.id}
+              onSelect={(selected) => setChosen({ ...selected })} />
           ))}
         </div>
-        {currentChosen && <ItemPicker key={currentChosen.id} item={currentChosen} busy={add.isPending}
-          onAdd={(quantity, ids, notes) => add.mutate({ quantity, ids, notes })} />}
+        {currentChosen && <div ref={optionsRef} style={{ scrollMarginTop: 16 }}>
+          <ItemPicker key={currentChosen.id} item={currentChosen} busy={add.isPending}
+            onAdd={(quantity, ids, notes) => add.mutate({ quantity, ids, notes })} />
+        </div>}
       </>}
       {ownDraft && (
         <section className="card stack">
