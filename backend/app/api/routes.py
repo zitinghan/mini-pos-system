@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone, date, time
 from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from fastapi.responses import FileResponse
-from sqlalchemy import select
+from sqlalchemy import select, func, and_, or_
 from app.core import config
 from app.core.security import current_user, admin, hash_pin, verify_pin, token_hash
 from app.database.db import transaction
@@ -356,12 +356,23 @@ def payment(identity: int, data: Pay, key: str = Depends(idempotency_key), user=
 
 
 @router.get('/print-jobs')
-def print_jobs(user=Depends(current_user)):
+def print_jobs(completed: bool | None = None, user=Depends(current_user)):
     with transaction() as db:
-        query = select(PrintJob).order_by(PrintJob.id.desc()).limit(100)
+        finished = func.coalesce(or_(TableSession.status.in_(['PAID', 'CANCELLED']), and_(
+            PrintJob.batch_id.is_(None), PrintJob.payment_id.is_(None), PrintJob.status == 'SENT')), False)
+        query = (select(PrintJob, TableSession.id, TableSession.status, finished)
+            .outerjoin(OrderBatch, PrintJob.batch_id == OrderBatch.id)
+            .outerjoin(Payment, PrintJob.payment_id == Payment.id)
+            .outerjoin(TableSession, TableSession.id == func.coalesce(OrderBatch.session_id, Payment.session_id))
+            .order_by(PrintJob.id.desc()))
+        if completed is not None:
+            query = query.where(finished == completed)
+        if completed is not False:
+            query = query.limit(100)
         if user['role'] != 'ADMIN':
             query = query.where(PrintJob.payment_id.is_(None))
-        return [job_data(job) for job in db.scalars(query)]
+        return [{**job_data(job), 'session_id': session_id, 'session_status': session_status,
+                 'completed': bool(is_completed)} for job, session_id, session_status, is_completed in db.execute(query)]
 
 
 @router.get('/payments/{payment_id}/receipt')

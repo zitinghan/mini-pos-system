@@ -14,10 +14,17 @@ export default function Orders() {
   const [image, setImage] = useState<string | null>(null);
   const [receiptImage, setReceiptImage] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  const [showCompleted, setShowCompleted] = useState(false);
   const jobs = useQuery({
-    queryKey: ['print-jobs'],
-    queryFn: () => api<PrintJob[]>('/print-jobs'),
+    queryKey: ['print-jobs', 'active'],
+    queryFn: () => api<PrintJob[]>('/print-jobs?completed=false'),
     refetchInterval: 4000,
+  });
+  const completed = useQuery({
+    queryKey: ['print-jobs', 'completed'],
+    queryFn: () => api<PrintJob[]>('/print-jobs?completed=true'),
+    enabled: showCompleted,
+    refetchInterval: showCompleted ? 4000 : false,
   });
   const tables = useQuery({
     queryKey: ['tables'],
@@ -40,6 +47,30 @@ export default function Orders() {
 
   useEffect(() => () => { if (image) URL.revokeObjectURL(image); }, [image]);
 
+  const orderCard = (job: PrintJob) => (
+    <section className="card stack order-card" key={job.id}>
+      <div className="row spread">
+        <h2>桌号 {job.table || '—'}</h2>
+        <span className="pill">{job.completed ? '已完成' : '未完成'}{job.session_status ? ` · ${label(job.session_status)}` : ' · 测试单'}</span>
+      </div>
+      <div className="row spread">
+        <strong>{job.payment_id ? `收据 R${String(job.payment_id).padStart(6, '0')}` : job.batch_id ? `订单 #${job.batch_id}` : '测试单'} / 任务 #{job.id}</strong>
+        <span className={`print-status ${job.status}`}>{label(job.status)}</span>
+      </div>
+      <small>{localTime(job.created_at)} · {job.routing_group === 'RECEIPT' ? '收银收据' : job.routing_group === 'BEVERAGE' ? '饮料' : job.routing_group === 'KITCHEN' ? '厨房' : '厨房 / 饮料'} · 尝试 {job.attempts} 次 {job.reprint ? '· 重印' : ''}</small>
+      {job.error && <p className="error">{translateError(job.error)}</p>}
+      <div className="row">
+        {job.preview && <button onClick={() => { setReceiptImage(job.document_type === 'RECEIPT'); previewJob(job.id).then(setImage).catch(setError); }}>
+          {job.document_type === 'RECEIPT' ? '查看收据' : '查看厨房单'}
+        </button>}
+        {job.payment_id && <Link className="back" to={`/receipts/${job.payment_id}`}>打开付款收据</Link>}
+        {admin && !['PENDING', 'SENDING'].includes(job.status) && <ConfirmButton disabled={retry.isPending} onConfirm={() => retry.mutate(job.id)}>
+          核实{job.payment_id ? '收银' : '厨房'}后重印
+        </ConfirmButton>}
+      </div>
+    </section>
+  );
+
   return (
     <>
       <h1>当前订单</h1>
@@ -50,33 +81,22 @@ export default function Orders() {
           </Link>
         ))}
       </div>
-      <h2>厨房 / 饮料 / 收据打印记录</h2>
-      <p className="muted">“已发送”代表数据已送出，请留意厨房是否实际出纸。重复打印会标记“重印”。</p>
+      <h2>未完成订单{jobs.data ? `（${jobs.data.length}）` : ''}</h2>
+      <p className="muted">付款并清台后归入已完成订单。“已发送”仅代表打印数据已送出，请核实实际出纸。重印会保留标记。</p>
       <ErrorBox error={jobs.error || tables.error || error} />
       {jobs.isPending && <Loading />}
-      {jobs.data?.map((job) => (
-        <section className="card stack" key={job.id}>
-          <div className="row spread">
-            <strong>{job.payment_id ? `收据 R${String(job.payment_id).padStart(6, '0')}` : job.batch_id ? `订单 #${job.batch_id}` : '测试单'} / 任务 #{job.id}</strong>
-            <span className={`print-status ${job.status}`}>{label(job.status)}</span>
-          </div>
-          <small>{localTime(job.created_at)} · {job.routing_group === 'RECEIPT' ? '收银收据' : job.routing_group === 'BEVERAGE' ? '饮料' : job.routing_group === 'KITCHEN' ? '厨房' : '厨房 / 饮料'} · 尝试 {job.attempts} 次 {job.reprint ? '· 重印' : ''}</small>
-          {job.error && <p className="error">{translateError(job.error)}</p>}
-          <div className="row">
-            {job.preview && (
-              <button onClick={() => { setReceiptImage(job.document_type === 'RECEIPT'); previewJob(job.id).then(setImage).catch(setError); }}>
-                {job.document_type === 'RECEIPT' ? '查看收据' : '查看厨房单'}
-              </button>
-            )}
-            {job.payment_id && <Link className="back" to={`/receipts/${job.payment_id}`}>打开付款收据</Link>}
-            {admin && !['PENDING', 'SENDING'].includes(job.status) && (
-              <ConfirmButton disabled={retry.isPending} onConfirm={() => retry.mutate(job.id)}>
-                核实厨房后重印
-              </ConfirmButton>
-            )}
-          </div>
-        </section>
-      ))}
+      {jobs.data?.length === 0 && <p className="muted">暂无未完成订单。</p>}
+      {jobs.data?.map(orderCard)}
+      <button type="button" aria-expanded={showCompleted} aria-controls="completed-orders" onClick={() => setShowCompleted((value) => !value)}>
+        {showCompleted ? '收起已完成订单' : '展开已完成订单'}
+      </button>
+      {showCompleted && <section id="completed-orders" aria-label="已完成订单">
+        <h2>已完成订单</h2><small>最近 100 条记录，可查看打印状态及重印。</small>
+        {completed.isPending && <Loading />}
+        <ErrorBox error={completed.error} />
+        {completed.data?.length === 0 && <p className="muted">暂无已完成订单。</p>}
+        {completed.data?.map(orderCard)}
+      </section>}
       {image && (
         <div className="modal" role="dialog" aria-modal="true" aria-label="厨房单预览">
           <div className="stack">

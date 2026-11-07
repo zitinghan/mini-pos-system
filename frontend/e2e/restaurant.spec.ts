@@ -40,7 +40,9 @@ test('first order, incremental kitchen ticket, cash payment and history', async 
   await expect(page.getByRole('button', { name: new RegExp(tableName) })).toContainText('RM 29.00');
 
   await page.getByRole('link', { name: /订单/ }).click();
-  const secondJob = page.locator('section').filter({ hasText: `任务 #${second.print_job_id}` });
+  const secondJob = page.locator('.order-card').filter({ hasText: `任务 #${second.print_job_id}` });
+  await expect(secondJob.getByRole('heading', { name: `桌号 ${tableName}` })).toBeVisible();
+  await expect(secondJob).toContainText('未完成 · 用餐中');
   await expect(secondJob).toContainText('已发送至打印机');
   await secondJob.getByRole('button', { name: '查看厨房单' }).click();
   await expect(page.getByRole('img', { name: '厨房订单，无价格' })).toBeVisible();
@@ -68,6 +70,16 @@ test('first order, incremental kitchen ticket, cash payment and history', async 
   await page.getByRole('link', { name: '← 返回桌台', exact: true }).click();
   await expect(page.getByRole('heading', { name: '选择桌台' })).toBeVisible();
   await expect(page.getByRole('button', { name: new RegExp(tableName) })).toContainText('空桌');
+  await page.getByRole('link', { name: /订单/ }).click();
+  await expect(secondJob).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '展开已完成订单' })).toHaveAttribute('aria-expanded', 'false');
+  await page.getByRole('button', { name: '展开已完成订单' }).click();
+  await expect(secondJob).toContainText('已完成 · 已付款');
+  await expect(secondJob.getByRole('heading', { name: `桌号 ${tableName}` })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath('completed-orders-expanded.png'), fullPage: true });
+  await page.getByRole('button', { name: '收起已完成订单' }).click();
+  await expect(secondJob).toHaveCount(0);
   await page.getByRole('link', { name: /营业记录/ }).click();
   await expect(page.getByText('RM 29.00', { exact: true }).first()).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
