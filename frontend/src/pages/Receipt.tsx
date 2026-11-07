@@ -7,6 +7,7 @@ import type { CustomerReceipt } from '../services/types';
 import { ErrorBox, Loading, ConfirmButton } from '../components/Common';
 import { localTime, money } from '../utils/format';
 import { label } from '../utils/i18n';
+import { visibleModifiers } from '../utils/modifiers';
 
 export function ReceiptPaper({ receipt }: { receipt: CustomerReceipt }) {
   return <article className="receipt-paper" aria-label="客户收据">
@@ -17,7 +18,7 @@ export function ReceiptPaper({ receipt }: { receipt: CustomerReceipt }) {
     <small>{localTime(receipt.time)}</small><small>收银：{receipt.cashier}</small>
     <div className="receipt-items">{receipt.items.map((item) => <div className="receipt-line" key={item.id}>
       <div className="row spread"><strong>{item.quantity} × {item.name}</strong><strong>{money(item.line_total)}</strong></div>
-      {item.modifiers.length > 0 && <p>{item.modifiers.map((modifier) => modifier.name).join(' · ')}</p>}
+      {visibleModifiers(item.modifiers).length > 0 && <p>{visibleModifiers(item.modifiers).map((modifier) => modifier.name).join(' · ')}</p>}
       {item.description && <p>{item.description}</p>}
       {!!item.physical_bottles && <p>共 {item.physical_bottles} 瓶</p>}
       {item.notes && <p>备注：{item.notes}</p>}

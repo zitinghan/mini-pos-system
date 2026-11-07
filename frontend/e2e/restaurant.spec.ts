@@ -406,3 +406,30 @@ test('table books on submit, order remarks persist and unpaid edits print a corr
   await expect(receipt).toContainText('一起上菜，先送饮料');
   await expect(receipt).toContainText('RM 11.00');
 });
+
+test('neutral modifier defaults are hidden on orders and receipts but remain editable', async ({ page }) => {
+  await page.goto('/');
+  await page.getByLabel('员工名称').fill('browser-owner');
+  await page.getByLabel('PIN 码').fill('928461');
+  await page.getByRole('button', { name: '登录', exact: true }).click();
+  await page.getByRole('button', { name: /^T17/ }).click();
+  await page.getByRole('button', { name: /^面粉粿/ }).click();
+  await expect(page.getByRole('button', { name: '不加蛋', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await page.getByRole('button', { name: '加入草稿 · RM 8.00' }).click();
+  await expect(page.getByRole('heading', { name: '面粉粿', exact: true })).toHaveCount(0);
+  await expect(page.getByText('不加蛋', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('堂食', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('汤', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '修改 1 × 面粉粿', exact: true }).click();
+  const editor = page.getByRole('dialog', { name: '修改餐点' });
+  await expect(editor.getByRole('button', { name: '不加蛋', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await editor.getByRole('button', { name: '关闭编辑' }).click();
+  await page.getByRole('button', { name: '确认下单 / 送档口' }).click();
+  await page.getByRole('button', { name: /^T17/ }).click();
+  await page.getByRole('button', { name: '查看账单 / 收款' }).click();
+  await page.getByRole('button', { name: '确认收款并清台' }).click();
+  const receipt = page.getByRole('article', { name: '客户收据' });
+  await expect(receipt.getByText('汤', { exact: true })).toBeVisible();
+  await expect(receipt.getByText(/不加蛋|普通|堂食/)).toHaveCount(0);
+  await expect(receipt).toContainText('RM 8.00');
+});

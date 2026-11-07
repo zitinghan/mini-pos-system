@@ -3,6 +3,7 @@ from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw, ImageFont
 from app.core.config import FONT_PATH
 from app.printing.stations import STATIONS
+from app.printing.modifiers import visible_modifiers
 
 
 def ticket_lines(ticket, reprint=False):
@@ -36,7 +37,7 @@ def ticket_lines(ticket, reprint=False):
             lines.append(('原内容（作废）', 36))
             for item in previous:
                 lines.append((f"{item['quantity']} x {item['name']}", 48))
-                lines.extend((f"  {entry['name']}", 48) for entry in item['modifiers'])
+                lines.extend((f"  {entry['name']}", 48) for entry in visible_modifiers(item['modifiers']))
                 if item.get('notes'):
                     lines.append((f"备注 {item['notes']}", 36))
             lines.append(('改为以下内容', 36))
@@ -46,7 +47,8 @@ def ticket_lines(ticket, reprint=False):
             total += item['quantity']
             if item.get('description'):
                 lines.append((f"  {item['description']}", 36))
-            for modifier in item['modifiers']:
+            previous_item = next((entry for entry in previous if entry.get('id') == item.get('id')), None)
+            for modifier in visible_modifiers(item['modifiers'], previous_item['modifiers'] if previous_item else ()):
                 lines.append((f"  {modifier['name']}", 48))
             if item.get('physical_bottles'):
                 lines.append((f"  共 {item['physical_bottles']} 瓶", 36))
@@ -70,7 +72,7 @@ def receipt_lines(receipt, reprint=False):
         lines.append((f"收银 {receipt['cashier']}", 22))
     for item in receipt['items']:
         lines.extend([('------------------------', 20), (f"{item['quantity']} x {item['name']}", 40)])
-        for modifier in item['modifiers']:
+        for modifier in visible_modifiers(item['modifiers']):
             lines.append((f"  {modifier['name']}", 32))
         if item.get('description'):
             lines.append((item['description'], 26))
