@@ -47,6 +47,11 @@ test('first order, incremental kitchen ticket, cash payment and history', async 
   await secondJob.getByRole('button', { name: '查看厨房单' }).click();
   await expect(page.getByRole('img', { name: '厨房订单，无价格' })).toBeVisible();
   await page.screenshot({ path: info.outputPath('kitchen-preview.png'), fullPage: true });
+  await page.getByRole('img', { name: '厨房订单，无价格' }).click();
+  await expect(page.getByRole('dialog', { name: '厨房单预览' })).toBeVisible();
+  await page.getByRole('dialog', { name: '厨房单预览' }).click({ position: { x: 5, y: 5 } });
+  await expect(page.getByRole('dialog', { name: '厨房单预览' })).toHaveCount(0);
+  await secondJob.getByRole('button', { name: '查看厨房单' }).click();
   await page.getByRole('button', { name: '关闭预览' }).click();
 
   // Read authoritative batch content too: the second job must refer only to the added batch.
@@ -62,6 +67,11 @@ test('first order, incremental kitchen ticket, cash payment and history', async 
   await expect(page.getByRole('heading', { name: '付款收据', exact: true })).toBeVisible();
   await expect(page.getByRole('article', { name: '客户收据' })).toBeVisible();
   await expect(page.getByRole('button', { name: '浏览器打印 / 保存 PDF' })).toBeVisible();
+  await page.getByRole('button', { name: '查看收据打印预览' }).click();
+  await page.getByRole('img', { name: '客户收据及付款金额' }).click();
+  await expect(page.getByRole('dialog', { name: '收据打印预览' })).toBeVisible();
+  await page.getByRole('dialog', { name: '收据打印预览' }).click({ position: { x: 5, y: 5 } });
+  await expect(page.getByRole('dialog', { name: '收据打印预览' })).toHaveCount(0);
   await page.screenshot({ path: info.outputPath('customer-receipt.png'), fullPage: true });
   await page.emulateMedia({ media: 'print' });
   await expect(page.getByRole('navigation')).toBeHidden();

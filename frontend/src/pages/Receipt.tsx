@@ -71,6 +71,7 @@ export default function Receipt() {
       </div>
     </div>
     <ReceiptPaper receipt={data} />
-    {image && <div className="modal no-print" role="dialog" aria-modal="true" aria-label="收据打印预览"><div className="stack"><button onClick={() => setImage(null)}>关闭预览</button><img className="ticket-preview" src={image} alt="客户收据及付款金额" /></div></div>}
+    {image && <div className="modal no-print" role="dialog" aria-modal="true" aria-label="收据打印预览"
+      onClick={(event) => { if (event.target === event.currentTarget) setImage(null); }}><div className="stack"><button onClick={() => setImage(null)}>关闭预览</button><img className="ticket-preview" src={image} alt="客户收据及付款金额" /></div></div>}
   </section>;
 }

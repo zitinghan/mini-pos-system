@@ -98,7 +98,8 @@ export default function Orders() {
         {completed.data?.map(orderCard)}
       </section>}
       {image && (
-        <div className="modal" role="dialog" aria-modal="true" aria-label="厨房单预览">
+        <div className="modal" role="dialog" aria-modal="true" aria-label="厨房单预览"
+          onClick={(event) => { if (event.target === event.currentTarget) setImage(null); }}>
           <div className="stack">
             <button onClick={() => setImage(null)}>关闭预览</button>
             <img className="ticket-preview" src={image} alt={receiptImage ? '客户收据及付款金额' : '厨房订单，无价格'} />
