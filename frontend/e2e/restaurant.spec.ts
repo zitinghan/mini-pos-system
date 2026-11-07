@@ -1,5 +1,37 @@
 import { test, expect } from '@playwright/test';
 
+test('kueh takeaway soup separation is optional free and retained on the receipt',async({page})=>{
+  await page.goto('/');
+  const required=(await (await page.request.get('/api/auth/setup-status')).json()).setup_required;
+  await page.getByLabel('员工名称').fill('browser-owner');
+  await page.getByLabel(required?'设置 6–12 位数字 PIN':'PIN 码').fill('928461');
+  if(required)await page.getByLabel('服务器设置令牌').fill('isolated-browser-test-setup-token');
+  await page.getByRole('button',{name:required?'创建管理员并登录':'登录',exact:true}).click();
+  await page.getByRole('button',{name:/^T16/}).click();
+  await page.getByRole('button',{name:/^面粉粿 RM/}).click();
+  await expect(page.getByRole('button',{name:'汤分开',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'打包',exact:true}).click();
+  await expect(page.getByRole('button',{name:'汤分开',exact:true})).toHaveAttribute('aria-pressed','false');
+  await page.getByRole('button',{name:'汤分开',exact:true}).click();
+  await page.getByRole('button',{name:'堂食',exact:true}).click();
+  await expect(page.getByRole('button',{name:'汤分开',exact:true})).toHaveCount(0);
+  await page.getByRole('button',{name:'打包',exact:true}).click();
+  await expect(page.getByRole('button',{name:'汤分开',exact:true})).toHaveAttribute('aria-pressed','false');
+  await page.getByRole('button',{name:'汤分开',exact:true}).click();
+  await page.getByRole('button',{name:/^大份/}).click();
+  await page.getByRole('button',{name:/^加蛋/}).click();
+  await page.getByRole('button',{name:'加入草稿 · RM 11.00'}).click();
+  await expect(page.locator('.line').first()).toContainText('汤分开');
+  await page.getByRole('button',{name:'确认下单 / 送档口'}).click();
+  await page.getByRole('button',{name:/^T16/}).click();
+  await page.getByRole('button',{name:'查看账单 / 收款'}).click();
+  await page.getByRole('button',{name:'确认收款并清台'}).click();
+  const receipt=page.getByRole('article',{name:'客户收据'});
+  await expect(receipt).toContainText('汤分开');
+  await expect(receipt).toContainText('打包');
+  await expect(receipt).toContainText('RM 11.00');
+});
+
 test('restore a cancelled takeaway table and keep its green manual paid note',async({page},info)=>{
   await page.goto('/');
   const required=(await (await page.request.get('/api/auth/setup-status')).json()).setup_required;

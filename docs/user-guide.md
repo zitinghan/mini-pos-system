@@ -21,6 +21,8 @@ For a customer who cancels after waiting, use 取消此项 beside the food, or �
 
 整桌备注（所有轮次） is at the bottom of the ordering page, after the bill and any other staff drafts. 小吃 also includes 云吞汤 (10粒, RM8); quantity/takeaway are available and it routes to the noodle stall.
 
+面粉粿 / 面粉糕 offers **汤分开** under 打包设置 only after choosing 打包. It is optional, not selected automatically and has no surcharge. Returning to 堂食 clears it. The selection appears on cart, preparation tickets and receipts; ordinary/large/egg pricing remains unchanged.
+
 Every item has 堂食 / 打包 at the top of its options; choose 打包 for takeaway. Prepared drinks also offer Kosong（不加糖）or Siu Dai（少甜）, with optional Kao（加浓）. Iced drinks offer 少冰 / 去冰; switching to hot clears the ice adjustment. These choices do not add a fee and appear on the appropriate stall ticket and cashier receipt. Bottled/canned drinks, plain water and beer keep only their relevant temperature/package and takeaway choices. See [takeaway and drink options](takeaway-and-drinks.md).
 
 Order/bill lines and new thermal receipts omit the free neutral labels 不加蛋、普通、堂食. The choices stay selected in the editor and stored in history; prices are unchanged. Actual additions and preparation instructions (加蛋、加面、大份、打包、酱汁、辣度、汤/干、冷热 and drink adjustments) remain visible. Correction tickets explicitly show a neutral choice when it reverses an earlier instruction, such as 加蛋→不加蛋 or 打包→堂食. Old rendered preview images are retained as the original print record.

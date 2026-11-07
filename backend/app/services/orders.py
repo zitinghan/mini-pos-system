@@ -83,6 +83,12 @@ def price_item(db, item_id, quantity, option_ids, *, campaigns=None, allow_unava
     except PriceValidationError as exc:
         raise HTTPException(422, str(exc)) from exc
     selected = [option for option in options if option.id in option_ids]
+    if item.sku == 'MEE_HOON_KUEH':
+        packing = {group.id for group in groups if group.name == '用餐方式'}
+        soup = {group.id for group in groups if group.name == '打包设置'}
+        if any(option.group_id in soup and option.name == '汤分开' for option in selected) and not any(
+                option.group_id in packing and option.name == '打包' for option in selected):
+            raise HTTPException(422, '汤分开只适用于打包，请先选择打包。')
     if any(set(option.incompatible_with) & set(option_ids) for option in selected):
         raise HTTPException(422, 'Incompatible modifier selections')
     variants = [option for option in selected if option.unit_price is not None]

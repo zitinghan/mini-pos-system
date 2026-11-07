@@ -120,6 +120,10 @@ def seed():
                             display_order=max((option.display_order for option in options), default=-1) + 1))
             if item.sku == 'MEE_HOON_KUEH':
                 ensure_optional_choices(item, '份量', 10, [('普通', True), ('大份', False)], prices={'大份': 200})
+                dine_ids = list(db.scalars(select(ModifierOption.id).join(ModifierGroup, ModifierGroup.id == ModifierOption.group_id)
+                    .join(MenuItemModifierGroup, MenuItemModifierGroup.group_id == ModifierGroup.id)
+                    .where(MenuItemModifierGroup.item_id == item.id, ModifierGroup.name == '用餐方式', ModifierOption.name == '堂食')))
+                ensure_optional_choices(item, '打包设置', 101, [('汤分开', False)], incompatible_with=dine_ids)
             if item.sku == 'CANNED':
                 ensure_optional_choices(item, '品牌 / 口味', 20, [(name, False) for name in
                     ['Sprite', 'Coke', 'Fanta', '100 PLUS', '菊花茶', '7UP', 'Passion Fruit']])

@@ -22,6 +22,30 @@ const drink: MenuItem = { id: 1, name: 'Kopi O', base_price: 230, groups: [
   ] },
 ] };
 
+it('shows optional soup separation only for takeaway and clears it when returning to dine-in',()=>{
+  const add=vi.fn();
+  const kueh:MenuItem={id:2,name:'面粉粿',sku:'MEE_HOON_KUEH',base_price:800,groups:[
+    {id:10,name:'用餐方式',minimum:0,maximum:1,options:[
+      {id:11,name:'堂食',price:0,is_default:true},{id:12,name:'打包',price:0,is_default:false}]},
+    {id:20,name:'打包设置',minimum:0,maximum:1,options:[
+      {id:21,name:'汤分开',price:0,is_default:false,incompatible_with:[11]}]},
+  ]};
+  render(<ItemPicker item={kueh} busy={false} onAdd={add}/>);
+  expect(screen.queryByRole('button',{name:'汤分开'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'打包'}));
+  expect(screen.getByRole('button',{name:'汤分开'})).toHaveAttribute('aria-pressed','false');
+  fireEvent.click(screen.getByRole('button',{name:'汤分开'}));
+  expect(screen.getByRole('button',{name:'加入草稿 · RM 8.00'})).toBeEnabled();
+  expect(screen.getByRole('button',{name:'堂食'})).toBeEnabled();
+  fireEvent.click(screen.getByRole('button',{name:'堂食'}));
+  expect(screen.queryByRole('button',{name:'汤分开'})).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole('button',{name:'打包'}));
+  expect(screen.getByRole('button',{name:'汤分开'})).toHaveAttribute('aria-pressed','false');
+  fireEvent.click(screen.getByRole('button',{name:'汤分开'}));
+  fireEvent.click(screen.getByRole('button',{name:'加入草稿 · RM 8.00'}));
+  expect(new Set(add.mock.calls[0][1])).toEqual(new Set([12,21]));
+});
+
 it('shows packing first, allows one sweetness with Kao and keeps the configured price', () => {
   const add = vi.fn();
   const { container } = render(<ItemPicker item={drink} onAdd={add} busy={false} />);

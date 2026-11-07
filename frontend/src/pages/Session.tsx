@@ -44,10 +44,14 @@ export function ItemPicker({ item, onAdd, busy, initial }: PickerProps) {
   const allOptions = item.groups.flatMap((group) => group.options);
   const selectedOptions = allOptions.filter((option) => selected.includes(option.id));
   const iceIds = new Set(item.groups.filter((group) => group.name === '冰量').flatMap((group) => group.options.map((option) => option.id)));
-  const visibleGroups = item.groups.filter((group) => group.name !== '冰量' || group.options.some((option) =>
-    option.enabled !== false && !selectedOptions.some((entry) => entry.incompatible_with?.includes(option.id) || option.incompatible_with?.includes(entry.id))));
+  const packingGroups = item.groups.filter((group) => group.name === '用餐方式');
+  const isTakeaway = packingGroups.some((group) => group.options.some((option) => option.name === '打包' && selected.includes(option.id)));
+  const soupPackingIds = new Set(item.groups.filter((group) => group.name === '打包设置').flatMap((group) => group.options.map((option) => option.id)));
+  const visibleGroups = item.groups.filter((group) => (group.name !== '打包设置' || isTakeaway) && (group.name !== '冰量' || group.options.some((option) =>
+    option.enabled !== false && !selectedOptions.some((entry) => entry.incompatible_with?.includes(option.id) || option.incompatible_with?.includes(entry.id)))));
   const displayGroups = [...visibleGroups.filter((group) => group.name === '用餐方式'),
-    ...visibleGroups.filter((group) => group.name !== '用餐方式')];
+    ...visibleGroups.filter((group) => group.name === '打包设置'),
+    ...visibleGroups.filter((group) => !['用餐方式', '打包设置'].includes(group.name))];
   const variant = selectedOptions.find((option) => option.unit_price != null);
   const pricedIds = new Set(item.groups.filter((group) => group.options.some((option) => option.unit_price != null
     || option.price > 0 || initial?.modifiers.some((entry) => entry.option_id === option.id && entry.price > 0)))
@@ -76,12 +80,14 @@ export function ItemPicker({ item, onAdd, busy, initial }: PickerProps) {
               <button type="button" key={option.id}
                 disabled={!selected.includes(option.id) && selectedOptions.some((entry) =>
                   !(group.name === '温度' && iceIds.has(entry.id)) &&
+                  !(group.name === '用餐方式' && soupPackingIds.has(entry.id)) &&
                   (entry.incompatible_with?.includes(option.id) || option.incompatible_with?.includes(entry.id)))}
                 aria-pressed={selected.includes(option.id)}
                 className={selected.includes(option.id) ? 'selected' : ''}
                 onClick={() => setSelected((previous) => {
                   const compatible = group.name === '温度' ? previous.filter((id) => !iceIds.has(id) || !allOptions.some((entry) =>
-                    entry.id === id && (entry.incompatible_with?.includes(option.id) || option.incompatible_with?.includes(id)))) : previous;
+                    entry.id === id && (entry.incompatible_with?.includes(option.id) || option.incompatible_with?.includes(id))))
+                    : group.name === '用餐方式' && option.name !== '打包' ? previous.filter((id) => !soupPackingIds.has(id)) : previous;
                   if (group.maximum === 1) {
                     if (group.minimum === 0 && group.name !== '用餐方式' && compatible.includes(option.id)) {
                       return compatible.filter((id) => id !== option.id);

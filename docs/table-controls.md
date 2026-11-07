@@ -34,6 +34,8 @@ At cashier checkout, the screen reminds staff to check previously collected fund
 
 ## Menu additions
 
+面粉粿 / 面粉糕 now has an optional **汤分开** choice under 打包设置. It is free and unselected initially. The picker shows it only after 打包 and clears it on returning to 堂食; the backend requires explicit takeaway even when older clients omit the default dine-in choice. It is available only on this dish. The selected instruction is snapshotted, printed on the preparation ticket and retained on bills/receipts/history. Removing it from an unpaid submitted item prints a correction with the old instruction struck through. Idempotent seed adds one group/option/link; existing prices, enabled states, incompatibilities and historical records are preserved without schema changes.
+
 面粉粿 has 普通 RM8 / 大份 RM10, with egg adding RM1 (RM9 / RM11). The new portion group accepts omission for existing phones/drafts, meaning regular, and repeated seeding preserves configured prices.
 
 汽水 / 罐装 has one optional 品牌 / 口味 choice: **Sprite, Coke, Fanta, 100 PLUS, 菊花茶, 7UP, Passion Fruit**. No brand is automatically selected or printed. Each choice has no surcharge and uses the existing configured Hot/Iced price (initially RM3/RM3.30). Selected names appear on cart, bill, beverage ticket and customer receipt. Existing Hot/Iced administrator-verification flags are retained.
@@ -57,6 +59,8 @@ Cashier receipts now default to **no paper**. The payment transaction still save
 Migration `0007_table_controls` adds table remarks/revisions, round paid-label/revision fields, cancellation reasons and session links on print jobs. Old print-job session links are backfilled from their batch/payment, without changing original payloads, delivery status or amounts. Idempotent seeding adds only missing 面粉粿 portions and canned brand choices. Existing menu prices, stock, promotions, paid history and printer configuration are preserved.
 
 ## Verification
+
+汤分开 update: 94 focused backend cases (menu pricing, takeaway rules and submitted-item edits), all 40 frontend tests, the production build and 3 Android browser cases passed. Verification includes RM8/9/10/11 pricing, omitted legacy choices, rejecting soup separation without takeaway, switching back to dine-in, correction strike-through and receipt snapshots. Repeated seed on a backup preserves every original record/setting and adds exactly one group, one option and their item link.
 
 Recovery/takeaway update: the full **246 backend tests**, **39 frontend tests**, production build and **9 Android browser cases** passed. Paid recovery was rechecked after removing unnecessary submission keys from cloned batches. Browser checks cover cancelled-table restoration, green paid-first notes, 等待打包, financial reversal without double sales, original receipt voiding, discount recovery and standard checkout at 360/390/412 widths. Raster previews confirm larger bold takeaway labels and strike-through on old/cancelled content; no live printer output is claimed. A twice-run migration/seed on a current restaurant backup preserved every original record/settings field and created only an empty reversal table.
 
