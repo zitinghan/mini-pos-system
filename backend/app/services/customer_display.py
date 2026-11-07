@@ -1,10 +1,11 @@
 """Optional B1 numeric display; serial failures must never undo a payment."""
 import json
 import logging
+import os
 from pathlib import Path
 import threading
 
-CONFIG_PATH = Path(__file__).resolve().parents[2] / 'data' / 'customer-display.json'
+CONFIG_PATH = Path(os.getenv('CUSTOMER_DISPLAY_CONFIG', str(Path(__file__).resolve().parents[2] / 'data' / 'customer-display.json')))
 lock = threading.RLock()
 logger = logging.getLogger('keke.customer_display')
 

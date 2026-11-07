@@ -32,6 +32,7 @@ with tempfile.TemporaryDirectory(prefix='keke-browser-') as directory:
         'DATABASE_URL': f'sqlite:///{directory}/pos.db',
         'PRINT_OUTPUT_DIR': f'{directory}/tickets',
         'SETUP_TOKEN': 'isolated-browser-test-setup-token',
+        'CUSTOMER_DISPLAY_CONFIG': f'{directory}/customer-display.json',
     }
     windows_font = Path(os.environ.get('WINDIR', 'C:/Windows')) / 'Fonts/msyh.ttc'
     if windows_font.is_file():

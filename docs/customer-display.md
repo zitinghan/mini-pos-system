@@ -27,3 +27,5 @@ errors are also logged in the server log. Reconnecting does not replay payments.
 
 Focused checks: from `backend`, run
 `../.venv/Scripts/python.exe -m pytest tests/test_customer_display.py -q`.
+
+`CUSTOMER_DISPLAY_CONFIG` can override the configuration path. Browser acceptance tests point it at their isolated temporary directory, so simulated checkouts never write to the restaurant's physical serial display. Normal Windows startup keeps the existing local configuration path.
