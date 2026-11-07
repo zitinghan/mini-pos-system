@@ -63,6 +63,7 @@ export default function Checkout() {
       </p>}
       <section className="card stack">
         <Lines items={bill.data?.items ?? []} />
+        {bill.data?.order_notes?.map((note) => <p className="order-notes" key={note.batch_id}>订单 #{note.batch_id} 备注：{note.notes}</p>)}
         <div className="row spread"><h2>应收总额</h2><h1>{money(total)}</h1></div>
         <div className="option-grid">
           {[['CASH', '现金'], ['QR', '二维码'], ['OTHER', '其他']].map(([value, name]) => (

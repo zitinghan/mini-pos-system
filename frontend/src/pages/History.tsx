@@ -35,6 +35,7 @@ export default function History() {
     {history.data?.map((transaction) => <details className="card" key={transaction.id}>
       <summary><strong>#{String(transaction.id).padStart(6, '0')} · {transaction.bill.table}</strong><span>{money(transaction.total)}</span><small>{localTime(transaction.created_at)} · {label(transaction.method)}</small></summary>
       <Lines items={transaction.bill.items} />
+      {transaction.bill.order_notes?.map((note) => <p className="order-notes" key={note.batch_id}>订单 #{note.batch_id} 备注：{note.notes}</p>)}
       <p>实收 {money(transaction.received)} · 找零 {money(transaction.change)}</p>
       <small>用餐时长：{duration(transaction.bill.dining_duration_seconds)}</small>
       <Link className="back" to={`/receipts/${transaction.id}`}>查看 / 打印收据</Link>

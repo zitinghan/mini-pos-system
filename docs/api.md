@@ -19,9 +19,10 @@ Success responses are typed objects or lists; HTTP errors use `{"detail":"messag
 | PATCH | `/menu/options/{id}` | Admin; update modifier surcharge |
 | POST | `/order-batches` | Staff; `{"session_id":1}`; returns/reuses owned draft |
 | POST | `/order-batches/{id}/items` | Owner/admin; validated item; Idempotency-Key required |
+| PATCH | `/order-batches/{id}/items/{item_id}` | Unpaid item edit; private drafts owner/admin; revision, expected unit price and Idempotency-Key required |
 | DELETE | `/order-batches/{id}/items/{item_id}` | Owner/admin; cancel draft line only |
 | DELETE | `/order-batches/{id}` | Owner/admin; cancel draft |
-| POST | `/order-batches/{id}/submit` | Owner/admin; Idempotency-Key required; commit and queue |
+| POST | `/order-batches/{id}/submit` | Owner/admin; optional `{"notes":"整单备注"}` body; Idempotency-Key required; atomically save/queue |
 | GET | `/table-sessions/{id}/orders`, `/table-sessions/{id}/bill` | Staff; batches and authoritative submitted bill |
 | POST | `/table-sessions/{id}/checkout`, `/table-sessions/{id}/resume` | Admin; set/clear ordering pause |
 | POST | `/table-sessions/{id}/close-empty` | Admin; cancel empty session and drafts |

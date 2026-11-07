@@ -58,7 +58,7 @@ def test_curry_rice_portions(client, headers, portion, price):
 @pytest.mark.parametrize('sku,name,portion,price', SNACKS)
 def test_all_snacks_and_kitchen_portions(client, headers, sku, name, portion, price):
     food = catalog(client, headers)[sku]
-    assert food['groups'] == []
+    assert all(group['minimum'] == 0 for group in food['groups'])
     batch = draft(client, headers, open_session(client, headers))
     result = add(client, headers, batch, food, [], 3).json()
     assert result['line_total'] == price * 3
@@ -125,7 +125,7 @@ def test_customization_rules_are_per_item_and_remain_complimentary(client, heade
     foods = catalog(client, headers)
     food = foods['WANTAN_MEE']
     batch = draft(client, headers, open_session(client, headers))
-    extras = food['groups'][-1]['options']
+    extras = next(group['options'] for group in food['groups'] if group['name'] == '免费定制')
     selected = selections(food, *[option['name'] for option in extras])
     assert add(client, headers, batch, food, selected).json()['unit_price'] == 800
     result = client.patch(f"/api/menu/options/{extras[0]['id']}/configuration", headers=headers, json={'enabled': True, 'incompatible_with': [extras[1]['id']]})
@@ -135,7 +135,7 @@ def test_customization_rules_are_per_item_and_remain_complimentary(client, heade
     assert add(client, headers, batch, foods['FRIES'], [extras[0]['id']]).status_code == 422
     assert client.patch(f"/api/menu/options/{extras[0]['id']}/configuration", headers=headers, json={'enabled': False, 'incompatible_with': []}).status_code == 200
     assert add(client, headers, batch, food, selections(food, extras[0]['name'])).status_code == 422
-    assert foods['CURRY_RICE']['groups'][-1]['options'][0]['id'] != extras[0]['id']
+    assert next(group for group in foods['CURRY_RICE']['groups'] if group['name'] == '免费定制')['options'][0]['id'] != extras[0]['id']
 
 
 def test_repeat_seed_preserves_admin_edits_and_verification(client, headers):
@@ -305,7 +305,7 @@ def test_notes_and_beer_snapshots_survive_later_menu_edits(client, headers):
     with transaction() as db:
         item = db.get(MenuItem, food['id'])
         item.name = 'Changed beer name'
-        option = db.get(ModifierOption, payload['option_ids'][0])
+        option = db.get(ModifierOption, next(option['id'] for group in food['groups'] for option in group['options'] if option['name'] == '3瓶'))
         option.bottles, option.unit_price, option.name = 5, 10000, 'Changed package'
     bill = client.get(f'/api/table-sessions/{session}/bill', headers=headers).json()
     line = bill['items'][0]

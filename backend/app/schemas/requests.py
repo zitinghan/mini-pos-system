@@ -16,12 +16,20 @@ class NewUser(Credentials):
 
 class NewBatch(StrictModel):
     session_id: int = Field(gt=0)
+    notes: str = Field(default='', max_length=500)
+
+class SubmitBatch(StrictModel):
+    notes: str | None = Field(default=None, max_length=500)
 
 class NewItem(StrictModel):
     menu_item_id: int = Field(gt=0)
     quantity: int = Field(ge=1, le=99)
     option_ids: list[int] = Field(max_length=30)
     notes: str = Field(default='', max_length=240)
+
+class EditItem(NewItem):
+    expected_revision: int = Field(ge=1)
+    expected_unit_price: int = Field(ge=0)
 
 class PriceUpdate(StrictModel):
     price: int = Field(ge=0, le=1000000)

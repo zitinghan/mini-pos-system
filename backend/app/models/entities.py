@@ -116,6 +116,7 @@ class OrderBatch(Record, Base):
     status: Mapped[str] = mapped_column(default='DRAFT')
     submission_key: Mapped[str | None] = mapped_column(unique=True)
     submitted_at: Mapped[str | None]
+    notes: Mapped[str] = mapped_column(default='')
     __table_args__ = (
         Index('uq_user_draft', 'session_id', 'user_id', unique=True, sqlite_where=text("status = 'DRAFT'")),
         CheckConstraint("status IN ('DRAFT','SUBMITTED','CANCELLED')"),
@@ -139,6 +140,7 @@ class OrderItem(Record, Base):
     bottles_per_unit: Mapped[int] = mapped_column(default=0)
     physical_bottles: Mapped[int] = mapped_column(default=0)
     notes: Mapped[str] = mapped_column(default='')
+    revision: Mapped[int] = mapped_column(default=1)
     __table_args__ = (CheckConstraint('quantity > 0 AND line_total >= 0'),)
 
 class OrderItemModifier(Record, Base):
@@ -178,6 +180,7 @@ class PrintJob(Record, Base):
     __tablename__ = 'print_jobs'
     batch_id: Mapped[int | None] = mapped_column(ForeignKey('order_batches.id'), index=True)
     payment_id: Mapped[int | None] = mapped_column(ForeignKey('payments.id'), index=True)
+    change_id: Mapped[int | None] = mapped_column(ForeignKey('audit_logs.id'), index=True)
     printer_mode: Mapped[str | None]
     status: Mapped[str] = mapped_column(default='PENDING', index=True)
     attempts: Mapped[int] = mapped_column(default=0)
@@ -188,7 +191,8 @@ class PrintJob(Record, Base):
     claimed_at: Mapped[str | None]
     routing_group: Mapped[str] = mapped_column(default='COMBINED')
     __table_args__ = (
-        Index('uq_active_print_batch', 'batch_id', 'routing_group', unique=True, sqlite_where=text("status IN ('PENDING','SENDING')")),
+        Index('uq_active_print_batch', 'batch_id', 'routing_group', unique=True, sqlite_where=text("status IN ('PENDING','SENDING') AND change_id IS NULL")),
+        Index('uq_active_print_change', 'change_id', 'routing_group', unique=True, sqlite_where=text("status IN ('PENDING','SENDING') AND change_id IS NOT NULL")),
         Index('uq_active_print_payment', 'payment_id', unique=True, sqlite_where=text("status IN ('PENDING','SENDING')")),
         Index('uq_original_receipt_print', 'payment_id', unique=True, sqlite_where=text('reprint = 0 AND payment_id IS NOT NULL')),
         CheckConstraint("status IN ('PENDING','SENDING','SENT','FAILED','UNKNOWN')"),

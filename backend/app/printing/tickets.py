@@ -20,12 +20,26 @@ def ticket_lines(ticket, reprint=False):
     lines.append((f"类型 {order_type}", 25))
     timestamp = datetime.fromisoformat(ticket['time']).astimezone(ZoneInfo('Asia/Kuala_Lumpur'))
     lines.append((timestamp.strftime('%d/%m %H:%M'), 20))
+    if ticket.get('notes'):
+        lines.append((f"整单备注 {ticket['notes']}", 36))
+    if ticket.get('order_type') == 'UPDATE':
+        lines.extend([('更改单 / UPDATE', 40), ('请用更改后内容替换旧内容', 30)])
+        lines.append((f"更改记录 #{ticket['change_ref']}", 22))
     total = 0
     for station, label in STATIONS:
         items = [item for item in ticket['items'] if item.get('printer_group', 'KITCHEN') == station]
         if not items:
             continue
         lines.append((f'----- {label} -----', 30))
+        previous = [item for item in ticket.get('previous_items', []) if item.get('printer_group', 'KITCHEN') == station]
+        if previous:
+            lines.append(('原内容（作废）', 36))
+            for item in previous:
+                lines.append((f"{item['quantity']} x {item['name']}", 48))
+                lines.extend((f"  {entry['name']}", 48) for entry in item['modifiers'])
+                if item.get('notes'):
+                    lines.append((f"备注 {item['notes']}", 36))
+            lines.append(('改为以下内容', 36))
         for item in items:
             lines.append(('------------------------', 20))
             lines.append((f"{item['quantity']} x {item['name']}", 48))
@@ -66,6 +80,8 @@ def receipt_lines(receipt, reprint=False):
             lines.append((f"备注 {item['notes']}", 26))
         lines.append((f"{item['quantity']} x {money(item['unit_price'])} = {money(item['line_total'])}", 24))
     method = {'CASH': '现金 CASH', 'QR': '二维码 QR', 'OTHER': '其他 OTHER'}.get(receipt['method'], receipt['method'])
+    for note in receipt.get('order_notes', []):
+        lines.append((f"订单 #{note['batch_id']} 备注 {note['notes']}", 26))
     lines.extend([('========================', 20), (f"合计 {money(receipt['total'])}", 36),
         (method, 26), (f"实收 {money(receipt['received'])}", 28), (f"找零 {money(receipt['change'])}", 28),
         ('谢谢光临 / THANK YOU', 22)])
@@ -78,13 +94,14 @@ def render(ticket, reprint, width, output):
     fonts = {size: ImageFont.truetype(FONT_PATH, size) for size in {size for _, size in lines}}
     wrapped = []
     for text, size in lines:
-        current = ''
-        for character in text:
-            if fonts[size].getlength(current + character) > width - 16 and current:
-                wrapped.append((current, size))
-                current = ''
-            current += character
-        wrapped.append((current, size))
+        for paragraph in text.replace('\r\n', '\n').replace('\r', '\n').split('\n'):
+            current = ''
+            for character in paragraph:
+                if fonts[size].getlength(current + character) > width - 16 and current:
+                    wrapped.append((current, size))
+                    current = ''
+                current += character
+            wrapped.append((current, size))
     height = 16 + sum(size + 12 for _, size in wrapped)
     image = Image.new('L', (width, height), 255)
     draw = ImageDraw.Draw(image)

@@ -47,11 +47,11 @@ def menu(db):
     return result
 
 
-def price_item(db, item_id, quantity, option_ids, *, campaigns=None):
+def price_item(db, item_id, quantity, option_ids, *, campaigns=None, allow_unavailable=False):
     item = require(db, MenuItem, item_id)
-    if not item.active:
+    if not item.active and not allow_unavailable:
         raise HTTPException(422, 'Item is unavailable')
-    if item.sold_out:
+    if item.sold_out and not allow_unavailable:
         raise HTTPException(409, f'{item.name} 已售罄，请移除或改选其他项目。')
     groups = list(db.scalars(
         select(ModifierGroup)
@@ -59,7 +59,9 @@ def price_item(db, item_id, quantity, option_ids, *, campaigns=None):
         .where(MenuItemModifierGroup.item_id == item.id)
     ))
     options = list(db.scalars(
-        select(ModifierOption).where(ModifierOption.group_id.in_([g.id for g in groups]), ModifierOption.enabled == True).order_by(ModifierOption.display_order, ModifierOption.id)
+        select(ModifierOption).join(ModifierGroup, ModifierGroup.id == ModifierOption.group_id)
+        .where(ModifierOption.group_id.in_([g.id for g in groups]), ModifierOption.enabled == True)
+        .order_by(ModifierGroup.display_order, ModifierOption.display_order, ModifierOption.id)
     ))
     selection_groups = [
         SelectionGroup(
@@ -106,12 +108,12 @@ def item_data(db, item):
         'unit_price': item.unit_price, 'line_total': item.line_total, 'status': item.status,
         'sku': item.sku, 'category_code': item.category_code, 'printer_group': item.printer_group,
         'description': item.description, 'variant_name': item.variant_name, 'bottles_per_unit': item.bottles_per_unit,
-        'physical_bottles': item.physical_bottles, 'notes': item.notes,
+        'physical_bottles': item.physical_bottles, 'notes': item.notes, 'revision': item.revision,
         'modifiers': [{'name': m.name, 'price': m.price, 'option_id': m.option_id} for m in db.scalars(select(OrderItemModifier).where(OrderItemModifier.item_id == item.id))]}
 
 
 def batches(db, session_id):
-    return [{'id': b.id, 'status': b.status, 'created_at': b.created_at, 'submitted_at': b.submitted_at,
+    return [{'id': b.id, 'status': b.status, 'created_at': b.created_at, 'submitted_at': b.submitted_at, 'notes': b.notes,
              'user_id': b.user_id,
              'items': [item_data(db, i) for i in db.scalars(select(OrderItem).where(OrderItem.batch_id == b.id).order_by(OrderItem.id))]}
         for b in db.scalars(select(OrderBatch).where(OrderBatch.session_id == session_id).order_by(OrderBatch.id))]
@@ -125,6 +127,8 @@ def bill(db, session_id):
         'total': sum(i.line_total for i in items), 'item_count': sum(i.quantity for i in items),
         'opened_at': session.opened_at, 'first_order_at': session.first_order_at, 'paid_at': session.paid_at,
         'closed_at': session.closed_at, 'dining_duration_seconds': dining_duration(session),
+        'order_notes': [{'batch_id': batch.id, 'notes': batch.notes} for batch in db.scalars(select(OrderBatch)
+            .where(OrderBatch.session_id == session_id, OrderBatch.status == 'SUBMITTED').order_by(OrderBatch.id)) if batch.notes],
         'has_drafts': db.scalar(select(OrderBatch.id).where(OrderBatch.session_id == session_id, OrderBatch.status == 'DRAFT').limit(1)) is not None}
 
 
@@ -138,7 +142,7 @@ def editable_batch(db, identity, user):
     return batch
 
 
-def submit(db, identity, key, user):
+def submit(db, identity, key, user, notes=None):
     batch = require(db, OrderBatch, identity)
     if batch.user_id != user['id'] and user['role'] != 'ADMIN':
         raise HTTPException(403, 'This draft belongs to another staff member')
@@ -146,8 +150,12 @@ def submit(db, identity, key, user):
     if previous:
         if previous.id != identity:
             raise HTTPException(409, 'Idempotency key already used for another batch')
+        if notes is not None and notes.strip() != previous.notes:
+            raise HTTPException(409, 'Idempotency key reused with different order notes')
         return submission_result(db, previous)
     editable_batch(db, identity, user)
+    if notes is not None:
+        batch.notes = notes.strip()
     if active_session(db, batch.session_id).status == 'PAYMENT_PENDING':
         raise HTTPException(409, 'Checkout in progress; cashier must resume ordering first')
     items = list(db.scalars(select(OrderItem).where(OrderItem.batch_id == identity, OrderItem.status == 'DRAFT')))
@@ -172,7 +180,7 @@ def submit(db, identity, key, user):
         session.first_order_at = batch.submitted_at
     session.status = 'OCCUPIED'
     ticket = {'table': require(db, RestaurantTable, session.table_id).name, 'batch_id': batch.id,
-        'time': batch.submitted_at, 'order_type': order_type, 'restaurant': '可可·南洋咖啡店',
+        'time': batch.submitted_at, 'order_type': order_type, 'restaurant': '可可·南洋咖啡店', 'notes': batch.notes,
         'items': [item_data(db, i) for i in items]}
     for station, _ in STATIONS:
         station_items = [item for item in ticket['items'] if item['printer_group'] == station]

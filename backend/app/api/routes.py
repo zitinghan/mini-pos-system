@@ -9,10 +9,11 @@ from app.core.security import current_user, admin, hash_pin, verify_pin, token_h
 from app.database.db import transaction
 from app.models.entities import (User, AuthSession, LoginAttempt, RestaurantTable, TableSession, MenuItem, ModifierOption,
     OrderBatch, OrderItem, OrderItemModifier, MenuItemModifierGroup, ModifierGroup, MenuPromotion, Payment, PrintJob, PrinterConfiguration, AuditLog, now)
-from app.schemas.requests import Setup, Credentials, NewUser, NewBatch, NewItem, PriceUpdate, Pay, PrinterSettings, OptionConfiguration, AvailabilityUpdate, PromotionUpdate
+from app.schemas.requests import Setup, Credentials, NewUser, NewBatch, NewItem, EditItem, SubmitBatch, PriceUpdate, Pay, PrinterSettings, OptionConfiguration, AvailabilityUpdate, PromotionUpdate
 from app.services import orders
 from app.services import promotions
 from app.services import receipts
+from app.services import order_edits
 from app.printing.jobs import job_data
 from app.printing.stations import STATIONS
 
@@ -120,7 +121,10 @@ def tables(user=Depends(current_user)):
         for table in db.scalars(select(RestaurantTable).order_by(RestaurantTable.id)):
             session = db.scalar(select(TableSession).where(TableSession.table_id == table.id, TableSession.status.in_(['OCCUPIED', 'PAYMENT_PENDING'])))
             current = orders.bill(db, session.id) if session else {'total': 0, 'item_count': 0}
-            result.append({'id': table.id, 'name': table.name, 'status': session.status if session else 'AVAILABLE',
+            visible_status = session.status if session else 'AVAILABLE'
+            if session and session.status == 'OCCUPIED' and not session.first_order_at and not current['item_count']:
+                visible_status = 'AVAILABLE'
+            result.append({'id': table.id, 'name': table.name, 'status': visible_status,
                 'session_id': session.id if session else None, 'opened_at': session.opened_at if session else None,
                 'first_order_at': session.first_order_at if session else None,
                 'total': current['total'], 'item_count': current['item_count']})
@@ -149,7 +153,8 @@ def open_table(table_id: int, user=Depends(current_user)):
             session = TableSession(table_id=table_id)
             db.add(session)
             db.flush()
-        return {'session_id': session.id, 'status': session.status}
+        current = orders.bill(db, session.id)
+        return {'session_id': session.id, 'status': 'AVAILABLE' if session.status == 'OCCUPIED' and not session.first_order_at and not current['item_count'] else session.status}
 
 
 @router.get('/menu')
@@ -256,7 +261,7 @@ def create_batch(data: NewBatch, user=Depends(current_user)):
         # Reuse this user's active draft, making reconnects safe.
         batch = db.scalar(select(OrderBatch).where(OrderBatch.session_id == data.session_id, OrderBatch.user_id == user['id'], OrderBatch.status == 'DRAFT'))
         if not batch:
-            batch = OrderBatch(session_id=data.session_id, user_id=user['id'])
+            batch = OrderBatch(session_id=data.session_id, user_id=user['id'], notes=data.notes.strip())
             db.add(batch)
             db.flush()
         return {'id': batch.id, 'status': batch.status}
@@ -301,6 +306,12 @@ def cancel_draft_item(identity: int, item_id: int, user=Depends(current_user)):
         return {'ok': True}
 
 
+@router.patch('/order-batches/{identity}/items/{item_id}')
+def edit_item(identity: int, item_id: int, data: EditItem, key: str = Depends(idempotency_key), user=Depends(current_user)):
+    with transaction() as db:
+        return order_edits.edit(db, identity, item_id, data, key, user)
+
+
 @router.delete('/order-batches/{identity}')
 def cancel_draft(identity: int, user=Depends(current_user)):
     with transaction() as db:
@@ -312,9 +323,9 @@ def cancel_draft(identity: int, user=Depends(current_user)):
 
 
 @router.post('/order-batches/{identity}/submit')
-def submit(identity: int, key: str = Depends(idempotency_key), user=Depends(current_user)):
+def submit(identity: int, data: SubmitBatch | None = None, key: str = Depends(idempotency_key), user=Depends(current_user)):
     with transaction() as db:
-        return orders.submit(db, identity, key, user)
+        return orders.submit(db, identity, key, user, data.notes if data else None)
 
 
 @router.get('/table-sessions/{identity}/orders')
@@ -431,13 +442,15 @@ def retry(identity: int, key: str = Depends(idempotency_key), user=Depends(admin
         if source.status in ('PENDING', 'SENDING'):
             raise HTTPException(409, 'Job is already queued or sending')
         # New history row; never erase the outcome of a previous attempt.
-        if source.payment_id is not None:
+        if source.change_id is not None:
+            descendants = list(db.scalars(select(PrintJob).where(PrintJob.change_id == source.change_id, PrintJob.routing_group == source.routing_group)))
+        elif source.payment_id is not None:
             descendants = list(db.scalars(select(PrintJob).where(PrintJob.payment_id == source.payment_id)))
         else:
             descendants = list(db.scalars(select(PrintJob).where(PrintJob.batch_id == source.batch_id, PrintJob.routing_group == source.routing_group))) if source.batch_id else []
         if any(j.status in ('PENDING', 'SENDING') for j in descendants):
             raise HTTPException(409, 'Another attempt for this batch is already queued')
-        job = PrintJob(batch_id=source.batch_id, payment_id=source.payment_id, routing_group=source.routing_group, ticket=source.ticket, reprint=True, attempts=source.attempts)
+        job = PrintJob(batch_id=source.batch_id, payment_id=source.payment_id, change_id=source.change_id, routing_group=source.routing_group, ticket=source.ticket, reprint=True, attempts=source.attempts)
         db.add(job)
         db.flush()
         db.add(AuditLog(user_id=user['id'], action='REPRINT', request_key=key, details={'source_job_id': identity, 'new_job_id': job.id, 'previous_status': source.status}))

@@ -88,3 +88,29 @@ def seed():
             install(sku, name, 'BEER', single, [('包装', 1, 1, [('单瓶', 0, single, 1), ('3瓶', 0, triple, 3)])])
         if db.get(PrinterConfiguration, 1) is None:
             db.add(PrinterConfiguration(id=1, config=PrinterSettings().model_dump()))
+
+        def ensure_optional_choices(item, name, position, options, incompatible_with=()):
+            group = db.scalar(select(ModifierGroup).join(MenuItemModifierGroup, MenuItemModifierGroup.group_id == ModifierGroup.id)
+                .where(MenuItemModifierGroup.item_id == item.id, ModifierGroup.name == name))
+            if group is None:
+                group = ModifierGroup(name=name, minimum=0, maximum=1, display_order=position)
+                db.add(group)
+                db.flush()
+                db.add(MenuItemModifierGroup(item_id=item.id, group_id=group.id))
+            for index, (option_name, default) in enumerate(options):
+                if db.scalar(select(ModifierOption.id).where(ModifierOption.group_id == group.id, ModifierOption.name == option_name)) is None:
+                    db.add(ModifierOption(group_id=group.id, name=option_name, price=0, is_default=default,
+                        display_order=index, incompatible_with=list(incompatible_with)))
+            db.flush()
+
+        # Existing products also receive new groups; never overwrite operator edits or submitted snapshots.
+        prepared_drinks = {sku for sku, *_ in DRINKS} - {'MINERAL_WATER', 'CANNED'}
+        for item in db.scalars(select(MenuItem).order_by(MenuItem.id)):
+            ensure_optional_choices(item, '用餐方式', 100, [('堂食', True), ('打包', False)])
+            if item.sku in prepared_drinks:
+                ensure_optional_choices(item, '甜度', 80, [('Kosong（不加糖）', False), ('Siu Dai（少甜）', False)])
+                ensure_optional_choices(item, '浓度', 90, [('Kao（加浓）', False)])
+                hot_ids = list(db.scalars(select(ModifierOption.id).join(ModifierGroup, ModifierGroup.id == ModifierOption.group_id)
+                    .join(MenuItemModifierGroup, MenuItemModifierGroup.group_id == ModifierGroup.id)
+                    .where(MenuItemModifierGroup.item_id == item.id, ModifierGroup.name == '温度', ModifierOption.name == '热 HOT')))
+                ensure_optional_choices(item, '冰量', 95, [('少冰 Less Ice', False), ('去冰 No Ice', False)], hot_ids)

@@ -58,6 +58,8 @@ export default function Orders() {
         <span className={`print-status ${job.status}`}>{label(job.status)}</span>
       </div>
       <small>{localTime(job.created_at)} · {label(job.routing_group ?? 'COMBINED')} · 尝试 {job.attempts} 次 {job.reprint ? '· 重印' : ''}</small>
+      {job.order_type === 'UPDATE' && <strong className="warning">更改单 · 请用新内容替换旧内容</strong>}
+      {job.notes && <p className="order-notes">整单备注：{job.notes}</p>}
       {job.error && <p className="error">{translateError(job.error)}</p>}
       <div className="row">
         {job.preview && <button onClick={() => { setReceiptImage(job.document_type === 'RECEIPT'); previewJob(job.id).then(setImage).catch(setError); }}>
@@ -75,7 +77,7 @@ export default function Orders() {
     <>
       <h1>当前订单</h1>
       <div className="active-tables">
-        {tables.data?.filter((table) => table.session_id).map((table) => (
+        {tables.data?.filter((table) => table.session_id && table.status !== 'AVAILABLE').map((table) => (
           <Link className="pill" key={table.id} to={`/session/${table.session_id}`}>
             {table.name} · {money(table.total)}
           </Link>

@@ -28,7 +28,7 @@ def test_new_sides_are_first_and_reseeding_preserves_edits(client, headers):
     assert [food['name'] for food in sides[:2]] == ['卤肉', '咖喱鸡']
     batch = draft(client, headers, open_session(client, headers))
     for food in sides[:2]:
-        assert food['base_price'] == 800 and food['groups'] == []
+        assert food['base_price'] == 800 and all(group['minimum'] == 0 for group in food['groups'])
         result = add(client, headers, batch, food, quantity=3).json()
         assert result['line_total'] == 2400 and result['printer_group'] == 'RICE'
     client.patch(f"/api/menu/items/{sides[0]['id']}", headers=headers, json={'price': 850})

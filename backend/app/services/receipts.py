@@ -11,7 +11,7 @@ def build(db, payment):
     return {'kind': 'RECEIPT', 'restaurant': '可可·南洋咖啡店', 'english_name': 'KE KE / KOPITIAM',
         'receipt_number': f'R{payment.id:06d}', 'payment_id': payment.id, 'session_id': payment.session_id,
         'table': current['table'], 'time': payment.created_at, 'cashier': cashier.name if cashier else '',
-        'currency': 'MYR', 'items': current['items'], 'total': payment.total,
+        'currency': 'MYR', 'items': current['items'], 'order_notes': current['order_notes'], 'total': payment.total,
         'received': payment.received, 'change': payment.change, 'method': payment.method,
         'dining_duration_seconds': current['dining_duration_seconds']}
 

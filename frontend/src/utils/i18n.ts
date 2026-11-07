@@ -8,6 +8,12 @@ export const zh = {tables:'桌台',orders:'订单',history:'营业记录',settin
 export const label=(key:string)=>zh[key as keyof typeof zh]??key;
 
 const errors:Record<string,string> = {
+ 'Item changed; refresh before editing':'餐点已被其他人修改，请关闭后重新打开再编辑。',
+ 'Item price changed; refresh before editing':'价格已变动，请关闭后重新打开再核对。',
+ 'Item is unavailable; only reduce quantity or edit notes':'此餐点已停售或售罄，只能减少数量或修改备注。',
+ 'Item cannot be edited':'此餐点当前不能修改。',
+ 'Idempotency key reused with different item edit':'修改请求与上次不同，请刷新后重试。',
+ 'Idempotency key reused with different order notes':'此订单已经提交，整单备注与上次不同。',
  'Select an installed Windows receipt printer':'请选择当前主机已安装的收银热敏打印机。',
  'Incompatible modifier selections':'所选定制项目不能同时使用，请调整选项。',
  'Choose only one price variant':'请选择一种温度或包装。',

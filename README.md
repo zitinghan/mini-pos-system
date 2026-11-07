@@ -8,6 +8,8 @@ Staff select a table, choose food and options, then submit an order to the kitch
 
 - **Tables:** T01–T20, availability labels, submitted totals, portion counts, and elapsed time.
 - **Ordering:** database-driven menus, required modifiers, quantities, persistent drafts, and additional order batches.
+- **Takeaway and drink options:** per-item dine-in/takeaway, prepared-drink Kosong/Siu Dai/Kao, and iced-only less/no ice; all preserve configured prices and historical snapshots. See [option rules](docs/takeaway-and-drinks.md).
+- **Order remarks and editing:** round remarks, revisioned unpaid item edits with separate correction tickets, and table occupancy only after the first successful submission. See [editing rules](docs/order-editing.md).
 - **Pricing:** integer sen, server-side validation, and submitted price snapshots that preserve historical bills.
 - **Kitchen printing:** transactional print queue, mock PNG previews, ESC/POS network output, delivery tracking, and audited manual reprints.
 - **Payments:** cash with change calculation, manually confirmed QR payments, and other full-table payments.
