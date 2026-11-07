@@ -4,6 +4,10 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 class StrictModel(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
 
+class CustomerDisplayAmount(StrictModel):
+    expected_total: int = Field(ge=0)
+    final_total: int = Field(ge=0, le=99999999)
+
 class Credentials(StrictModel):
     name: str = Field(min_length=1, max_length=80, pattern=r'^\S(?:.*\S)?$')
     pin: str = Field(pattern=r'^[0-9]{6,12}$')
