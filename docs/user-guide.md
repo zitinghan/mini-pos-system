@@ -29,6 +29,8 @@ For something outside the menu, use ＋ 自定义餐点 / 价格 below the item 
 
 ## Cashier checkout
 
+All submitted items marked 打包 change the table card's 用餐中 label to 等待打包. Adding dine-in food changes it back; cancelled items and unsent drafts do not determine this label. A green 已付款 note means every active ordering round has the manual paid-first label. If only some rounds are marked, the card says 部分已付款. These labels do not record a cashier payment or clear the table.
+
 1. Open the table and tap 查看账单 / 收款.
 2. Verify every submitted item and 应收总额. For an offer, enter 优惠后总价 (RM) directly (RM0 up to the original total, at most two decimal places). An optional 优惠备注 explains the offer; 恢复原价 removes it. If another device changes the bill total, the input returns to the current original total for review.
 3. 二维码 is selected by default. Verify funds yourself, or choose 现金 or 其他. For cash, enter ringgit, such as `50.00`; the app shows change and rejects insufficient amounts.
@@ -39,7 +41,15 @@ Food prices and kitchen tickets retain the original amounts. Customer receipts a
 
 For an accidentally opened empty table, an administrator can use 取消草稿并释放空桌. A table with submitted billable items must be paid; staff cannot erase submitted sales.
 
+For an accidentally closed table, the cashier/admin uses **桌台 → 恢复误关桌台**. Select the exact table/date/record, review its food and enter the reason. A cancelled unpaid table restores its previous items/drafts/remarks and sends a clear 恢复单 to affected stalls. Food cancelled individually before the whole-table closure stays cancelled. The original cancellation and print history remain.
+
+For a mistaken 确认收款并清台, use **确认撤销收款并恢复**. POS keeps the original payment/receipt, records its reversal and excludes it from sales, then opens an unpaid session with frozen food prices and notes. No food preparation or cashier receipt is automatically printed again. Original discounts are suggested at checkout when the subtotal is unchanged; review them before collecting again. This corrects POS records and does not refund a bank/QR transfer. Actual cash/funds must be checked separately.
+
+The original receipt shows 收款已撤销 / 原收据作废 and cannot be sent/reprinted from the server. Its original paper/preview and payment remain available as history. A table already used for another customer's food/drafts cannot be overwritten. A never-used empty session created by tapping the empty table may be retired automatically, with its identity retained in the recovery audit.
+
 ## Printer trouble
+
+Preparation tickets put **【打包】** on its own larger, bold line. Cancelled items and old correction content have a physical strike-through; replacement content remains normal. Cancellation/restore headers still identify the operation explicitly. On a restore notice, check the original food and avoid preparing/serving it twice.
 
 The 订单 page initially shows only unfinished orders. Each card shows its table number, completion status and separate print delivery status. Completion means successful payment and table release; sending a kitchen ticket does not complete the order. Tap 展开已完成订单 to view the latest 100 completed records, including cashier receipts, print errors and reprint actions; tap 收起已完成订单 to hide them again. Reusing a table does not reopen the previous session's completed orders.
 

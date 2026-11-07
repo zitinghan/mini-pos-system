@@ -6,6 +6,23 @@ from app.printing.stations import STATIONS
 from app.printing.modifiers import visible_modifiers
 
 
+def is_takeaway(item):
+    return item.get('takeaway') or item.get('description') == '打包' or any(entry['name'] == '打包' for entry in item.get('modifiers', []))
+
+
+class StyledText(str):
+    def __new__(cls, value, strike=False):
+        result = super().__new__(cls, value)
+        result.strike = strike
+        return result
+
+
+def strike_from(lines, start):
+    for index in range(start, len(lines)):
+        text, size = lines[index]
+        lines[index] = (StyledText(text, strike=True), size)
+
+
 def ticket_lines(ticket, reprint=False):
     if ticket.get('kind') == 'RECEIPT':
         return receipt_lines(ticket, reprint)
@@ -41,6 +58,8 @@ def ticket_lines(ticket, reprint=False):
         lines.append((f"更改记录 #{ticket['change_ref']}", 22))
     if ticket.get('order_type') == 'CANCEL':
         lines.extend([('取消单 / CANCEL', 48), ('停止制作 / 不要出餐', 36), (f"原因 {ticket.get('reason', '顾客取消')}", 36)])
+    if ticket.get('order_type') == 'RESTORE':
+        lines.extend([('恢复单 / RESTORE', 48), ('取消作废，核对后继续准备', 36), ('已制作请勿重复出餐', 36)])
     total = 0
     for station, label in STATIONS:
         items = [item for item in ticket['items'] if item.get('printer_group', 'KITCHEN') == station]
@@ -51,28 +70,34 @@ def ticket_lines(ticket, reprint=False):
         if previous:
             lines.append(('原内容（作废）', 36))
             for item in previous:
+                old_start = len(lines)
                 lines.append((f"{item['quantity']} x {item['name']}", 48))
-                if item.get('description'):
+                if is_takeaway(item): lines.append(('【打包】', 64))
+                if item.get('description') and item['description'] != '打包':
                     lines.append((f"  {item['description']}", 36))
-                lines.extend((f"  {entry['name']}", 48) for entry in visible_modifiers(item['modifiers']))
+                lines.extend((f"  {entry['name']}", 48) for entry in visible_modifiers(item['modifiers']) if entry['name'] != '打包')
                 if item.get('notes'):
                     lines.append((f"备注 {item['notes']}", 36))
+                strike_from(lines, old_start)
             lines.append(('改为以下内容', 36))
         for item in items:
             lines.append(('------------------------', 20))
+            item_start = len(lines)
             lines.append((f"{item['quantity']} x {item['name']}", 48))
+            if is_takeaway(item): lines.append(('【打包】', 64))
             total += item['quantity']
-            if item.get('description'):
+            if item.get('description') and item['description'] != '打包':
                 lines.append((f"  {item['description']}", 36))
             previous_item = next((entry for entry in previous if entry.get('id') == item.get('id')), None)
             if item.get('is_custom') and previous_item and previous_item.get('takeaway') and not item.get('takeaway'):
                 lines.append(('  堂食', 48))
             for modifier in visible_modifiers(item['modifiers'], previous_item['modifiers'] if previous_item else ()):
-                lines.append((f"  {modifier['name']}", 48))
+                if modifier['name'] != '打包': lines.append((f"  {modifier['name']}", 48))
             if item.get('physical_bottles'):
                 lines.append((f"  共 {item['physical_bottles']} 瓶", 36))
             if item.get('notes'):
                 lines.append((f"备注 {item['notes']}", 36))
+            if ticket.get('order_type') == 'CANCEL': strike_from(lines, item_start)
     lines.extend([('========================', 20), (f"{'取消' if ticket.get('order_type') == 'CANCEL' else '共'} {total} 份", 30)])
     return lines
 
@@ -122,20 +147,25 @@ def render(ticket, reprint, width, output):
     fonts = {size: ImageFont.truetype(FONT_PATH, size) for size in {size for _, size in lines}}
     wrapped = []
     for text, size in lines:
+        strike = getattr(text, 'strike', False)
         for paragraph in text.replace('\r\n', '\n').replace('\r', '\n').split('\n'):
             current = ''
             for character in paragraph:
                 if fonts[size].getlength(current + character) > width - 16 and current:
-                    wrapped.append((current, size))
+                    wrapped.append((current, size, strike))
                     current = ''
                 current += character
-            wrapped.append((current, size))
-    height = 16 + sum(size + 12 for _, size in wrapped)
+            wrapped.append((current, size, strike))
+    height = 16 + sum(size + 12 for _, size, _ in wrapped)
     image = Image.new('L', (width, height), 255)
     draw = ImageDraw.Draw(image)
     y = 4
-    for text, size in wrapped:
-        draw.text((8, y), text, font=fonts[size], fill=0)
+    for text, size, strike in wrapped:
+        bold = size == 64
+        draw.text((9 if bold else 8, y), text, font=fonts[size], fill=0, stroke_width=1 if bold else 0, stroke_fill=0)
+        if strike and text:
+            left, top, right, bottom = draw.textbbox((9 if bold else 8, y), text, font=fonts[size])
+            draw.line((max(8,left), (top+bottom)//2, min(width-8,right), (top+bottom)//2), fill=0, width=3)
         y += size + 12
     image = image.convert('1')
     image.save(output)

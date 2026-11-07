@@ -10,6 +10,22 @@ const apiMock = vi.hoisted(() => vi.fn());
 vi.mock('../services/api', () => ({ api: apiMock, requestKey: () => 'test-key', clearKey: vi.fn() }));
 afterEach(() => { apiMock.mockReset(); useAuth.getState().signOut(); });
 
+it('shows waiting takeaway and green paid labels without changing the underlying order state',async()=>{
+  let packed=true;
+  apiMock.mockImplementation(()=>Promise.resolve([{id:1,name:'T01',status:'OCCUPIED',session_id:1,total:800,item_count:1,
+    all_takeaway:packed,prepaid_label_status:packed?'ALL':'PARTIAL'}]));
+  const client=new QueryClient({defaultOptions:{queries:{retry:false}}});
+  const view=render(<QueryClientProvider client={client}><MemoryRouter><Tables/></MemoryRouter></QueryClientProvider>);
+  expect(await screen.findByText('等待打包')).toBeVisible();
+  expect(screen.getByText('已付款')).toHaveClass('table-paid-note');
+  expect(screen.getByRole('button',{name:/^T01/})).toHaveClass('OCCUPIED');
+  packed=false;
+  await client.invalidateQueries({queryKey:['tables']});
+  expect(await screen.findByText('用餐中')).toBeVisible();
+  expect(screen.getByText('部分已付款')).toHaveClass('table-paid-note');
+  view.unmount();client.clear();
+});
+
 it('keeps overdue tables red and stops blinking after acknowledgement without opening the table', async () => {
   let acknowledged: string | null = null;
   apiMock.mockImplementation((path: string) => {

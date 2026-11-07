@@ -49,7 +49,7 @@ def print_notices(db, session, record, items, order_type, batch=None, reason='',
             'session_id': session.id, 'scope': 'BATCH' if batch else 'TABLE', 'station': station,
             'time': now(), 'order_type': order_type, 'change_ref': record.id,
             'table_notes': session.notes, 'notes': batch.notes if batch else '',
-            'reason': reason, 'note_scope': note_scope, 'items': relevant if order_type == 'CANCEL' else []}
+            'reason': reason, 'note_scope': note_scope, 'items': relevant if order_type in ('CANCEL', 'RESTORE') else []}
         if batch:
             ticket.update(batch_id=batch.id, prepaid_label=batch.prepaid_label)
         job = PrintJob(batch_id=batch.id if batch else None, session_id=session.id,

@@ -15,7 +15,7 @@ export default function Checkout() {
   const [discard, setDiscard] = useState(false);
   const [printReceipt, setPrintReceipt] = useState(false);
   const [offer, setOffer] = useState<{ original: number; value: string } | null>(null);
-  const [offerReason, setOfferReason] = useState('');
+  const [offerReason, setOfferReason] = useState<string | null>(null);
   const bill = useQuery({
     queryKey: ['bill', id],
     queryFn: () => api<Bill>(`/table-sessions/${id}/bill`),
@@ -23,7 +23,10 @@ export default function Checkout() {
   });
   const sen = parseSen(received);
   const total = bill.data?.total ?? 0;
-  const finalText = offer?.original === total ? offer.value : (total / 100).toFixed(2);
+  const restoredOffer = bill.data?.recovery_offer;
+  const suggestedTotal = restoredOffer?.original_total === total ? restoredOffer.total : total;
+  const finalText = offer?.original === total ? offer.value : (suggestedTotal / 100).toFixed(2);
+  const currentOfferReason = offerReason ?? restoredOffer?.offer_reason ?? '';
   const finalTotal = parseSen(finalText);
   const validOffer = finalTotal !== null && finalTotal <= total;
   const hasDrafts = bill.data?.has_drafts ?? false;
@@ -38,7 +41,7 @@ export default function Checkout() {
         expected_total: total,
         discard_drafts: discard,
         ...(printReceipt ? { print_receipt:true } : {}),
-        ...(finalTotal !== total ? { final_total: finalTotal, offer_reason: offerReason.trim() } : {}),
+        ...(finalTotal !== total ? { final_total: finalTotal, offer_reason: currentOfferReason.trim() } : {}),
       };
       // An uncertain response retains the same identity after retry or reload.
       const key = requestKey(`pay:${id}:${JSON.stringify(payload)}`);
@@ -66,6 +69,7 @@ export default function Checkout() {
       <Link to={`/session/${id}`} className="back">← 查看订单</Link>
       <h1>{bill.data?.table} · 收款</h1>
       <ErrorBox error={bill.error || pay.error || resume.error} />
+      {restoredOffer&&<p className="notice">此桌由误收款恢复，原收款已撤销。请重新核对金额及优惠后收款。</p>}
       {bill.data?.has_prepaid_label && <p className="warning">部分订单已手动标记先付款，请核实已收款项，避免重复收款。此处仍需完成收银记录。</p>}
       {bill.data?.status === 'OCCUPIED' && <p className="notice" role="status">
         此桌已恢复点餐，请返回订单页面重新核对账单并开始结账。
@@ -81,7 +85,7 @@ export default function Checkout() {
         {!validOffer && <p className="error" role="alert">请输入不高于原价的有效金额，最多两位小数。</p>}
         {validOffer && finalTotal! < total && <>
           <div className="row spread"><span>优惠</span><strong>− {money(total-finalTotal!)}</strong></div>
-          <label>优惠备注（选填）<input maxLength={240} value={offerReason} disabled={pay.isPending}
+          <label>优惠备注（选填）<input maxLength={240} value={currentOfferReason} disabled={pay.isPending}
             onChange={(event) => setOfferReason(event.target.value)} /></label>
         </>}
         {offer?.original === total && <button className="quiet" disabled={pay.isPending}

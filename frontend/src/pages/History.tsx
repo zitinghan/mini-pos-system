@@ -34,8 +34,10 @@ export default function History() {
     <h2>已完成交易</h2>
     {history.data?.length === 0 && <p className="muted">当天暂无交易。</p>}
     {history.data?.map((transaction) => <details className="card" key={transaction.id}>
-      <summary><strong>#{String(transaction.id).padStart(6, '0')} · {transaction.bill.table}</strong><span>{money(transaction.total)}</span><small>{localTime(transaction.created_at)} · {label(transaction.method)}</small></summary>
+      <summary><strong>#{String(transaction.id).padStart(6, '0')} · {transaction.bill.table}{transaction.voided&&' · 收款已撤销'}</strong><span>{money(transaction.total)}</span><small>{localTime(transaction.created_at)} · {label(transaction.method)}</small></summary>
       <Lines items={transaction.bill.items} />
+      {transaction.voided&&<p className="error">收款已撤销，不计入营业额。{transaction.reversal_reason}
+        {transaction.restored_session_id&&<Link to={`/session/${transaction.restored_session_id}`}> 查看恢复后的桌台</Link>}</p>}
       {transaction.bill.table_notes && <p className="order-notes">整桌备注：{transaction.bill.table_notes}</p>}
       {transaction.bill.order_notes?.map((note) => <p className="order-notes" key={note.batch_id}>订单 #{note.batch_id} 备注：{note.notes}</p>)}
       {transaction.original_total != null && transaction.original_total !== transaction.total && <p>

@@ -5,10 +5,13 @@ import type { Table } from '../services/types';
 import { money, elapsed } from '../utils/format';
 import { label } from '../utils/i18n';
 import { ErrorBox, Loading } from '../components/Common';
+import { useAuth } from '../stores/auth';
+import TableRecovery from '../components/TableRecovery';
 
 export default function Tables() {
   const navigate = useNavigate();
   const client = useQueryClient();
+  const admin = useAuth((state) => state.user?.role === 'ADMIN');
   const query = useQuery({
     queryKey: ['tables'],
     queryFn: () => api<Table[]>('/tables'),
@@ -38,6 +41,7 @@ export default function Tables() {
         <span className="pill">每 4 秒更新</span>
       </div>
       <div className="legend"><span>● 空桌</span><span>● 用餐中</span><span>● 待结账</span></div>
+      {admin && <TableRecovery />}
       <ErrorBox error={query.error || open.error || acknowledge.error} />
       {query.isPending && <Loading />}
       <div className="table-grid">
@@ -49,7 +53,8 @@ export default function Tables() {
               ? navigate(`/session/${table.session_id}`)
               : open.mutate(table.id)}>
             <span className="table-name">{table.name}</span>
-            <span className="status">{label(table.status)}</span>
+            <span className="status">{table.status==='OCCUPIED'&&table.all_takeaway?'等待打包':label(table.status)}</span>
+            {table.prepaid_label_status&&<span className="table-paid-note">{table.prepaid_label_status==='ALL'?'已付款':'部分已付款'}</span>}
             <strong>{money(table.total)}</strong>
             <small>{table.item_count} 份 · <span className={table.wait_alert_due ? 'elapsed overdue' : 'elapsed'}>{table.first_order_at ? elapsed(table.first_order_at) : '尚未下单'}</span></small>
           </button>

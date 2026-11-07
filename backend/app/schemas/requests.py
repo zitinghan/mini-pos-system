@@ -30,6 +30,10 @@ class CancelTable(StrictModel):
     expected_change_token: str = Field(min_length=64, max_length=64)
     reason: str = Field(default='顾客取消', min_length=1, max_length=240)
 
+class RestoreTable(StrictModel):
+    expected_change_token: str = Field(min_length=64, max_length=64)
+    reason: str = Field(default='误关桌台', min_length=1, max_length=240)
+
 class TableNotes(StrictModel):
     expected_revision: int = Field(ge=1)
     notes: str = Field(max_length=500)

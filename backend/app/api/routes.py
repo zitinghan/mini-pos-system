@@ -8,7 +8,7 @@ from app.core import config
 from app.core.security import current_user, admin, hash_pin, verify_pin, token_hash
 from app.database.db import transaction
 from app.models.entities import (User, AuthSession, LoginAttempt, RestaurantTable, TableSession, MenuItem, ModifierOption,
-    OrderBatch, OrderItem, OrderItemModifier, MenuItemModifierGroup, ModifierGroup, MenuPromotion, Payment, PrintJob, PrinterConfiguration, AuditLog, now)
+    OrderBatch, OrderItem, OrderItemModifier, MenuItemModifierGroup, ModifierGroup, MenuPromotion, Payment, PaymentReversal, PrintJob, PrinterConfiguration, AuditLog, now)
 from app.schemas.requests import Setup, Credentials, NewUser, NewBatch, NewItem, EditItem, SubmitBatch, CancelItem, CancelTable, TableNotes, BatchDetails, PriceUpdate, Pay, PrinterSettings, OptionConfiguration, AvailabilityUpdate, PromotionUpdate
 from app.services import orders
 from app.services import promotions
@@ -18,6 +18,8 @@ from app.services import table_controls
 from app.services import table_attention
 from app.services import sales
 from app.services import custom_items
+from app.services import table_recovery
+from app.schemas.requests import RestoreTable
 from app.schemas.requests import CustomItem, EditCustomItem
 from app.printing.jobs import job_data
 from app.printing.stations import STATIONS
@@ -134,6 +136,8 @@ def tables(user=Depends(current_user)):
                 'first_order_at': session.first_order_at if session else None,
                  'wait_alert_due': table_attention.is_due(session),
                  'wait_alert_acknowledged_at': session.wait_alert_acknowledged_at if session else None,
+                 'prepaid_label_status': current.get('prepaid_label_status'),
+                 'all_takeaway': current.get('all_takeaway', False),
                 'total': current['total'], 'item_count': current['item_count']})
         return result
 
@@ -445,6 +449,8 @@ def payment_receipt(payment_id: int, user=Depends(admin)):
 @router.post('/payments/{payment_id}/receipt/print', status_code=201)
 def print_receipt(payment_id: int, key: str = Depends(idempotency_key), user=Depends(admin)):
     with transaction() as db:
+        if db.scalar(select(PaymentReversal.id).where(PaymentReversal.payment_id == payment_id)):
+            raise HTTPException(409, '此收款已撤销，原收据仅供查看。')
         payment = orders.require(db, Payment, payment_id)
         existing = db.scalar(select(AuditLog).where(AuditLog.request_key == key))
         if existing:
@@ -483,6 +489,8 @@ def preview(identity: int, user=Depends(current_user)):
 def retry(identity: int, key: str = Depends(idempotency_key), user=Depends(admin)):
     with transaction() as db:
         source = orders.require(db, PrintJob, identity)
+        if source.payment_id and db.scalar(select(PaymentReversal.id).where(PaymentReversal.payment_id == source.payment_id)):
+            raise HTTPException(409, '此收款已撤销，不能重印原收据。')
         previous = db.scalar(select(AuditLog).where(AuditLog.request_key == key))
         if previous:
             if previous.action != 'REPRINT' or previous.details['source_job_id'] != identity:
@@ -564,11 +572,14 @@ def test_print(user=Depends(admin)):
         return {**job_data(jobs[0]), 'print_jobs': [job_data(job) for job in jobs]}
 
 
-def day_payments(db, day):
+def day_payments(db, day, include_reversed=False):
     zone = ZoneInfo('Asia/Kuala_Lumpur')
     start = datetime.combine(day, time.min, zone).astimezone(timezone.utc).isoformat()
     end = datetime.combine(day + timedelta(days=1), time.min, zone).astimezone(timezone.utc).isoformat()
-    return list(db.scalars(select(Payment).where(Payment.created_at >= start, Payment.created_at < end).order_by(Payment.id.desc())))
+    query = select(Payment).where(Payment.created_at >= start, Payment.created_at < end)
+    if not include_reversed:
+        query = query.where(~Payment.id.in_(select(PaymentReversal.payment_id)))
+    return list(db.scalars(query.order_by(Payment.id.desc())))
 
 
 @router.get('/reports/daily-sales')
@@ -603,8 +614,14 @@ def daily_sales(day: date | None = None, user=Depends(admin)):
 @router.get('/reports/transactions')
 def transactions(day: date | None = None, user=Depends(admin)):
     with transaction() as db:
-        payments = day_payments(db, day) if day else list(db.scalars(select(Payment).order_by(Payment.id.desc()).limit(200)))
-        return [{**orders.payment_data(p), 'bill': orders.bill(db, p.session_id)} for p in payments]
+        payments = day_payments(db, day, include_reversed=True) if day else list(db.scalars(select(Payment).order_by(Payment.id.desc()).limit(200)))
+        result = []
+        for payment in payments:
+            reversal = db.scalar(select(PaymentReversal).where(PaymentReversal.payment_id == payment.id))
+            result.append({**orders.payment_data(payment), 'bill': orders.bill(db, payment.session_id),
+                'voided': reversal is not None, 'reversal_reason': reversal.reason if reversal else None,
+                'restored_session_id': reversal.restored_session_id if reversal else None})
+        return result
 
 
 @router.get('/audit-logs')
@@ -619,10 +636,24 @@ def close_empty(identity: int, user=Depends(admin)):
         session = orders.active_session(db, identity)
         if orders.bill(db, identity)['item_count']:
             raise HTTPException(409, 'Submitted items must be paid before closing')
+        before = {**orders.bill(db, identity), 'batches': orders.batches(db, identity)}
         for draft in db.scalars(select(OrderBatch).where(OrderBatch.session_id == identity, OrderBatch.status == 'DRAFT')):
             draft.status = 'CANCELLED'
-            for item in db.scalars(select(OrderItem).where(OrderItem.batch_id == draft.id)):
+            for item in db.scalars(select(OrderItem).where(OrderItem.batch_id == draft.id, OrderItem.status == 'DRAFT')):
                 item.status = 'CANCELLED'
+                item.revision += 1
         session.status, session.closed_at = 'CANCELLED', now()
-        db.add(AuditLog(user_id=user['id'], action='CLOSE_EMPTY', details={'session_id': identity}))
+        db.add(AuditLog(user_id=user['id'], action='CLOSE_EMPTY', details={'session_id': identity, 'before': before}))
         return {'ok': True}
+
+
+@router.get('/table-recovery')
+def closed_tables(user=Depends(admin)):
+    with transaction() as db:
+        return table_recovery.recent_closed(db)
+
+
+@router.post('/table-sessions/{identity}/restore')
+def restore_table(identity: int, data: RestoreTable, key: str = Depends(idempotency_key), user=Depends(admin)):
+    with transaction() as db:
+        return table_recovery.restore(db, identity, data, key, user)

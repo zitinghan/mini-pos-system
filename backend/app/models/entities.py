@@ -179,6 +179,14 @@ class PrinterConfiguration(Record, Base):
     config: Mapped[dict] = mapped_column(JSON)
 
 
+class PaymentReversal(Record, Base):
+    __tablename__ = 'payment_reversals'
+    payment_id: Mapped[int] = mapped_column(ForeignKey('payments.id'), unique=True)
+    restored_session_id: Mapped[int] = mapped_column(ForeignKey('table_sessions.id'), unique=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
+    reason: Mapped[str]
+
+
 class Receipt(Record, Base):
     __tablename__ = 'receipts'
     payment_id: Mapped[int] = mapped_column(ForeignKey('payments.id'), unique=True)

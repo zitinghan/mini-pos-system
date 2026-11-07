@@ -7,7 +7,7 @@ from app.services import promotions
 from app.database.seed import CUSTOM_ITEM_SKU
 from app.printing.stations import STATIONS
 from app.models.entities import (MenuItem, MenuCategory, ModifierGroup, ModifierOption, MenuItemModifierGroup,
-    TableSession, RestaurantTable, OrderBatch, OrderItem, OrderItemModifier, PrintJob, Payment, AuditLog, now)
+    TableSession, RestaurantTable, OrderBatch, OrderItem, OrderItemModifier, PrintJob, Payment, PaymentReversal, AuditLog, now)
 
 
 def require(db, model, identity):
@@ -131,13 +131,22 @@ def bill(db, session_id):
     items = list(db.scalars(select(OrderItem).join(OrderBatch).where(OrderBatch.session_id == session_id, OrderBatch.status == 'SUBMITTED', OrderItem.status == 'SUBMITTED')))
     batch_rows = list(db.scalars(select(OrderBatch).where(OrderBatch.session_id == session_id).order_by(OrderBatch.id)))
     all_rows = list(db.scalars(select(OrderItem).join(OrderBatch).where(OrderBatch.session_id == session_id).order_by(OrderItem.id)))
+    active_batches = [row for row in batch_rows if row.id in {item.batch_id for item in items}]
+    labelled = any(row.prepaid_label for row in active_batches)
+    recovery = db.scalar(select(PaymentReversal).where(PaymentReversal.restored_session_id == session_id))
+    prior_payment = db.get(Payment, recovery.payment_id) if recovery else None
+    item_snapshots = [item_data(db, item) for item in items]
     token = hashlib.sha256(json.dumps({'status': session.status, 'notes': session.notes, 'revision': session.metadata_revision,
         'batches': [(row.id, row.status, row.info_revision, row.notes, row.prepaid_label) for row in batch_rows],
         'items': [(row.id, row.status, row.revision, row.quantity, row.line_total) for row in all_rows]}, sort_keys=True).encode()).hexdigest()
     return {'session_id': session.id, 'table': require(db, RestaurantTable, session.table_id).name,
         'table_notes': session.notes, 'metadata_revision': session.metadata_revision, 'change_token': token,
-        'has_prepaid_label': any(row.prepaid_label for row in batch_rows if row.id in {item.batch_id for item in items}),
-        'status': session.status, 'items': [item_data(db, i) for i in items],
+        'has_prepaid_label': labelled,
+        'prepaid_label_status': ('ALL' if all(row.prepaid_label for row in active_batches) else 'PARTIAL') if labelled else None,
+        'recovery_offer': {'original_total': prior_payment.original_total if prior_payment.original_total is not None else sum(i.line_total for i in items),
+            'total': prior_payment.total, 'offer_reason': prior_payment.offer_reason} if prior_payment else None,
+        'all_takeaway': bool(item_snapshots) and all(item['takeaway'] or any(modifier['name'] == '打包' for modifier in item['modifiers']) for item in item_snapshots),
+        'status': session.status, 'items': item_snapshots,
         'total': sum(i.line_total for i in items), 'item_count': sum(i.quantity for i in items),
         'opened_at': session.opened_at, 'first_order_at': session.first_order_at, 'paid_at': session.paid_at,
         'closed_at': session.closed_at, 'dining_duration_seconds': dining_duration(session),
@@ -242,6 +251,8 @@ def pay(db, session_id, data, key, user):
     if previous:
         if previous.request_hash != fingerprint:
             raise HTTPException(409, 'Idempotency key reused with different payment details')
+        if db.scalar(select(PaymentReversal.id).where(PaymentReversal.payment_id == previous.id)):
+            raise HTTPException(409, '此收款已撤销，请从恢复后的桌台重新收款。')
         return payment_data(previous)
     session = active_session(db, session_id)
     current = bill(db, session_id)

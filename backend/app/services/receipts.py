@@ -1,6 +1,6 @@
 """Customer receipts use paid snapshots and never resend a payment on page reload."""
 from sqlalchemy import select
-from app.models.entities import Receipt, PrintJob, User, PrinterConfiguration
+from app.models.entities import Receipt, PrintJob, User, PrinterConfiguration, PaymentReversal
 from app.printing.jobs import job_data
 
 
@@ -41,7 +41,10 @@ def queue_original(db, payment):
 def document(db, payment):
     jobs = list(db.scalars(select(PrintJob).where(PrintJob.payment_id == payment.id).order_by(PrintJob.id.desc())))
     config = db.get(PrinterConfiguration, 1).config
+    reversal = db.scalar(select(PaymentReversal).where(PaymentReversal.payment_id == payment.id))
     return {**saved(db, payment), 'print_job': job_data(jobs[0]) if jobs else None,
+        'voided': reversal is not None, 'reversal_reason': reversal.reason if reversal else None,
+        'restored_session_id': reversal.restored_session_id if reversal else None,
         'print_history': [job_data(job) for job in jobs], 'configured_printer_mode': config.get('receipt_mode', 'mock'),
         'paper_width': config.get('receipt_width', 384),
         'paper_mm': config.get('receipt_paper_mm', 80 if config.get('receipt_width', 384) >= 500 else 58)}

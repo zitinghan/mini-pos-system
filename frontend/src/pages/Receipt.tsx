@@ -14,6 +14,7 @@ export function ReceiptPaper({ receipt }: { receipt: CustomerReceipt }) {
     <div className="receipt-brand">{receipt.restaurant}</div>
     <p className="receipt-english">{receipt.english_name}</p>
     <h2>收据 / RECEIPT</h2>
+    {receipt.voided&&<p className="error">收款已撤销 · 原收据作废{receipt.reversal_reason&&`：${receipt.reversal_reason}`}</p>}
     <div className="receipt-meta"><strong>{receipt.receipt_number}</strong><strong>桌号 {receipt.table}</strong></div>
     <small>{localTime(receipt.time)}</small><small>收银：{receipt.cashier}</small>
     <div className="receipt-items">{receipt.items.map((item) => <div className="receipt-line" key={item.id}>
@@ -65,7 +66,8 @@ export default function Receipt() {
   const paperWidth = `${data.paper_mm ?? (data.paper_width >= 500 ? 80 : 58)}mm`;
   return <section className="customer-receipt" style={{ '--receipt-width': paperWidth } as CSSProperties}>
     <style>{`@media print { @page { size: ${paperWidth} auto; margin: 3mm; } }`}</style>
-    <div className="no-print"><h1>付款收据</h1><p className="notice">收款已完成，桌台已释放。{job ? '收银收据已建立打印任务。' : '可查看收据，需要纸本时再打印。'}</p>
+    <div className="no-print"><h1>付款收据</h1><p className={data.voided?'error':'notice'}>{data.voided?'此收款已撤销，原收据仅供查看。':'收款已完成，桌台已释放。'+(job ? '收银收据已建立打印任务。' : '可查看收据，需要纸本时再打印。')}</p>
+      {data.voided&&data.restored_session_id&&<Link className="back" to={`/session/${data.restored_session_id}`}>查看恢复后的桌台</Link>}
       <div className="receipt-actions"><Link className="back" to="/">← 返回桌台</Link><button onClick={() => window.print()}>浏览器打印 / 保存 PDF</button></div>
       <div className="card stack"><h2>收银打印状态</h2>
         {job ? <><span className={`print-status ${job.status}`}>{label(job.status)}</span>
@@ -73,8 +75,8 @@ export default function Receipt() {
           {job.status === 'SENT' && job.printer_mode !== 'mock' && <small>已提交至打印机 / Windows 队列，请检查实际出纸。</small>}
           {job.error && <p className="error">{job.error}</p>}
           {job.preview && <button onClick={() => { previewJob(job.id).then(setImage).catch(setError); }}>查看收据打印预览</button>}
-          {!waiting && <ConfirmButton disabled={retry.isPending} onConfirm={() => retry.mutate()}>核实后重印收据</ConfirmButton>}
-        </> : <button disabled={send.isPending} onClick={() => send.mutate()}>打印收据</button>}
+          {!waiting&&!data.voided && <ConfirmButton disabled={retry.isPending} onConfirm={() => retry.mutate()}>核实后重印收据</ConfirmButton>}
+        </> : !data.voided&&<button disabled={send.isPending} onClick={() => send.mutate()}>打印收据</button>}
         <ErrorBox error={receipt.error || send.error || retry.error || error} />
       </div>
     </div>

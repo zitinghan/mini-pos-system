@@ -70,11 +70,12 @@ def run_once():
             from escpos.printer import Dummy
             device = Dummy(profile=config['profile'])
             device._raw(b'\x1b\x40')
-            if config['print_mode'] == 'raster':
+            if config['print_mode'] == 'raster' or any(getattr(line, 'strike', False) for line, _ in ticket_lines(ticket, reprint)):
                 device.image(image, impl=config['raster_command'])
             else:
                 for line, size in ticket_lines(ticket, reprint):
-                    device._raw(b'\x1d\x21' + (b'\x11' if size >= 30 else b'\x00'))
+                    device._raw(b'\x1b\x45' + (b'\x01' if size >= 64 else b'\x00'))
+                    device._raw(b'\x1d\x21' + (b'\x22' if size >= 64 else b'\x11' if size >= 30 else b'\x00'))
                     device._raw((line + '\n').encode(config['encoding'], errors='strict'))
             device._raw(b'\x1d\x21\x00' + b'\n' * config['feed'])
             if config['cutter']:
