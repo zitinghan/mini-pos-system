@@ -12,8 +12,8 @@ def test_migrate_seed_and_restart_without_data_loss(tmp_path):
         assert result.returncode == 0, result.stderr
     with sqlite3.connect(path) as db:
         assert db.execute('SELECT COUNT(*) FROM restaurant_tables').fetchone()[0] == 20
-        assert db.execute('SELECT COUNT(*) FROM menu_items').fetchone()[0] == 29
-        assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0] == '0004_receipts'
+        assert db.execute('SELECT COUNT(*) FROM menu_items').fetchone()[0] == 33
+        assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0] == '0005_rice_stall'
         assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
 
 

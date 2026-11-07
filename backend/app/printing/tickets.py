@@ -2,6 +2,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from PIL import Image, ImageDraw, ImageFont
 from app.core.config import FONT_PATH
+from app.printing.stations import STATIONS
 
 
 def ticket_lines(ticket, reprint=False):
@@ -20,7 +21,7 @@ def ticket_lines(ticket, reprint=False):
     timestamp = datetime.fromisoformat(ticket['time']).astimezone(ZoneInfo('Asia/Kuala_Lumpur'))
     lines.append((timestamp.strftime('%d/%m %H:%M'), 20))
     total = 0
-    for station, label in [('KITCHEN', '厨房'), ('BEVERAGE', '饮料')]:
+    for station, label in STATIONS:
         items = [item for item in ticket['items'] if item.get('printer_group', 'KITCHEN') == station]
         if not items:
             continue

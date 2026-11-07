@@ -167,7 +167,7 @@ export default function Session() {
     onSuccess: (result) => {
       refresh();
       useUI.getState().setNotice(
-        `订单 #${result.batch_id} 已保存；${result.print_jobs?.length ?? 1} 张制作单已排队，请在订单页查看厨房 / 饮料发送状态。`,
+        `订单 #${result.batch_id} 已保存；${result.print_jobs?.length ?? 1} 张制作单已排队，请在订单页查看面档 / 饭档 / 饮料档发送状态。`,
       );
       navigate('/');
     },

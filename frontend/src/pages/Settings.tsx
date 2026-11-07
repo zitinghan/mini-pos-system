@@ -86,19 +86,21 @@ export default function Settings() {
         {item.groups.filter((group) => group.minimum === 0).map((group) => <section key={group.id}><h2>{group.name}</h2>{group.options.map((option) => <Customization key={option.id} option={option} peers={group.options} />)}</section>)}
       </details>)}
     </section>
-    <section className="card stack"><h2>厨房 / 饮料打印机</h2>{!form ? <Loading /> : <form className="stack" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
+    <section className="card stack"><h2>面档 / 饭档 / 饮料档打印机</h2>{!form ? <Loading /> : <form className="stack" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
       <label>连接模式<select value={form.mode} onChange={(event) => change('mode', event.target.value as Printer['mode'])}><option value="mock">模拟打印机（开发）</option><option value="network">店内网络 ESC/POS</option></select></label>
-      <label className="check"><input type="checkbox" checked={!!form.separate_stations} onChange={(event) => change('separate_stations', event.target.checked)} />厨房和饮料使用独立打印机</label>
-      {!form.separate_stations && <small>同一台打印机分别打印厨房单、饮料单，每项只打印一次。</small>}
+      <label className="check"><input type="checkbox" checked={!!form.separate_stations} onChange={(event) => change('separate_stations', event.target.checked)} />面档、饭档和饮料档使用独立打印机</label>
+      {!form.separate_stations && <small>同一台打印机分开打印面档单、饭档单、饮料单；没有点单的档口不出单，每项只打印一次。</small>}
       {form.mode === 'mock' && <label>模拟结果<select value={form.simulation} onChange={(event) => change('simulation', event.target.value as Printer['simulation'])}><option value="success">成功发送</option><option value="connection_failure">连接失败（未发送）</option><option value="timeout">发送超时（结果不确定）</option><option value="uncertain">送达不确定</option></select></label>}
       {form.mode === 'network' && (form.separate_stations ? <>
-        <label>厨房打印机 IP<input value={form.kitchen_host ?? ''} placeholder="192.168.1.200" onChange={(event) => change('kitchen_host', event.target.value)} /></label>
-        <label>厨房 TCP 端口<input type="number" value={form.kitchen_port ?? 9100} onChange={(event) => change('kitchen_port', Number(event.target.value))} /></label>
+        <label>面档打印机 IP<input value={form.kitchen_host ?? ''} placeholder="192.168.1.200" onChange={(event) => change('kitchen_host', event.target.value)} /></label>
+        <label>面档 TCP 端口<input type="number" value={form.kitchen_port ?? 9100} onChange={(event) => change('kitchen_port', Number(event.target.value))} /></label>
+        <label>饭档打印机 IP<input value={form.rice_host ?? ''} placeholder="留空使用面档打印机" onChange={(event) => change('rice_host', event.target.value)} /></label>
+        <label>饭档 TCP 端口<input type="number" value={form.rice_port ?? 9100} onChange={(event) => change('rice_port', Number(event.target.value))} /></label>
         <label>饮料打印机 IP<input value={form.beverage_host ?? ''} placeholder="192.168.1.201" onChange={(event) => change('beverage_host', event.target.value)} /></label>
         <label>饮料 TCP 端口<input type="number" value={form.beverage_port ?? 9100} onChange={(event) => change('beverage_port', Number(event.target.value))} /></label>
       </> : <><label>打印机局域网 IP<input value={form.host} placeholder="192.168.1.200" onChange={(event) => change('host', event.target.value)} /></label><label>TCP 端口<input type="number" value={form.port} onChange={(event) => change('port', Number(event.target.value))} /></label></>)}
       <label>打印模式<select value={form.print_mode} onChange={(event) => change('print_mode', event.target.value as Printer['print_mode'])}><option value="raster">图片（推荐中文）</option><option value="text">文字（需要打印机支持）</option></select></label>
-      <div><strong>厨房 / 饮料纸宽</strong><div className="option-grid">
+      <div><strong>制作单纸宽</strong><div className="option-grid">
         {[{ width: 384, name: '58mm / 384 dots' }, { width: 576, name: '80mm / 576 dots' }].map((paper) => <button type="button" key={paper.width} aria-pressed={form.width === paper.width} className={form.width === paper.width ? 'selected' : ''} onClick={() => setForm({ ...form, width: paper.width, print_mode: 'raster' })}>{paper.name}</button>)}
       </div><small>选择纸宽会使用图片打印，让中文和备注按整张纸的可打印宽度换行。商品及选项保持大字。</small></div>
       <details><summary>硬件兼容设置</summary><div className="stack">

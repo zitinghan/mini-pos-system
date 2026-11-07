@@ -175,9 +175,11 @@ def test_concurrent_workers_and_stale_claim(client, headers):
     client.post('/api/printers/test-print', headers=headers)
     with ThreadPoolExecutor(max_workers=4) as pool:
         results = list(pool.map(lambda _: run_once(),range(4)))
-    assert results.count(True) == 2
+    assert results.count(True) == 3
     with transaction() as db:
-        job = db.scalar(select(PrintJob))
+        jobs = list(db.scalars(select(PrintJob)))
+        assert len(jobs) == 3 and all(job.attempts == 1 and job.status == 'SENT' for job in jobs)
+        job = jobs[0]
         job_id = job.id
         assert job.attempts == 1
         job.status, job.claimed_at = 'SENDING', '2020-01-01T00:00:00+00:00'

@@ -4,6 +4,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from app.services.pricing import SelectionGroup, PriceValidationError, calculate_price
 from app.services import promotions
+from app.printing.stations import STATIONS
 from app.models.entities import (MenuItem, MenuCategory, ModifierGroup, ModifierOption, MenuItemModifierGroup,
     TableSession, RestaurantTable, OrderBatch, OrderItem, OrderItemModifier, PrintJob, Payment, AuditLog, now)
 
@@ -25,7 +26,8 @@ def active_session(db, identity):
 def menu(db):
     result = []
     campaigns = promotions.active_promotions(db)
-    for item in db.scalars(select(MenuItem).where(MenuItem.active == True).order_by(MenuItem.id)):
+    for item in db.scalars(select(MenuItem).join(MenuCategory, MenuItem.category_id == MenuCategory.id)
+            .where(MenuItem.active == True).order_by(MenuCategory.display_order, MenuItem.display_order, MenuItem.id)):
         promotion = promotions.for_sku(campaigns, item.sku)
         category = db.get(MenuCategory, item.category_id)
         groups = list(db.scalars(select(ModifierGroup).join(MenuItemModifierGroup, MenuItemModifierGroup.group_id == ModifierGroup.id).where(MenuItemModifierGroup.item_id == item.id).order_by(ModifierGroup.display_order)))
@@ -33,7 +35,7 @@ def menu(db):
             'base_price': promotion.unit_price if promotion else item.base_price, 'regular_base_price': item.base_price,
             'sold_out': item.sold_out, 'promotion': promotions.data(promotion) if promotion else None,
             'sku': item.sku, 'category_code': category.code or 'MAINS', 'category_name': category.name,
-            'printer_group': category.printer_group, 'description': item.description,
+            'printer_group': item.printer_group or category.printer_group, 'display_order': item.display_order, 'description': item.description,
             'complimentary': item.complimentary, 'verification_required': item.verification_required,
             'verification_note': item.verification_note,
             'groups': [{'id': g.id, 'name': g.name, 'minimum': g.minimum, 'maximum': g.maximum, 'required': g.minimum > 0,
@@ -91,7 +93,7 @@ def price_item(db, item_id, quantity, option_ids, *, campaigns=None):
 def snapshot_item(db, item, source, options):
     category = db.get(MenuCategory, source.category_id)
     variant = next((option for option in options if option.unit_price is not None), None)
-    item.sku, item.category_code, item.printer_group = source.sku, category.code or 'MAINS', category.printer_group
+    item.sku, item.category_code, item.printer_group = source.sku, category.code or 'MAINS', source.printer_group or category.printer_group
     item.description = source.description
     item.variant_name = variant.name if variant else None
     item.bottles_per_unit = variant.bottles if variant else 0
@@ -172,7 +174,7 @@ def submit(db, identity, key, user):
     ticket = {'table': require(db, RestaurantTable, session.table_id).name, 'batch_id': batch.id,
         'time': batch.submitted_at, 'order_type': order_type, 'restaurant': '可可·南洋咖啡店',
         'items': [item_data(db, i) for i in items]}
-    for station in ('KITCHEN', 'BEVERAGE'):
+    for station, _ in STATIONS:
         station_items = [item for item in ticket['items'] if item['printer_group'] == station]
         if station_items:
             db.add(PrintJob(batch_id=batch.id, routing_group=station, ticket={**ticket, 'items': station_items}))

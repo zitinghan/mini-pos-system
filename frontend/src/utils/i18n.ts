@@ -1,5 +1,6 @@
 // Keep operational labels in one dictionary so a second locale can be added.
 export const zh = {tables:'桌台',orders:'订单',history:'营业记录',settings:'设置',
+  KITCHEN:'面档',RICE:'饭档',BEVERAGE:'饮料档',RECEIPT:'收银收据',COMBINED:'厨房 / 饮料',
   AVAILABLE:'空桌',OCCUPIED:'用餐中',PAYMENT_PENDING:'待结账',
   PENDING:'等待打印机',SENDING:'正在发送',SENT:'已发送至打印机',FAILED:'打印失败',UNKNOWN:'送达不确定',
   DRAFT:'草稿 · 未下单',SUBMITTED:'已下单',CANCELLED:'已取消',PAID:'已付款',

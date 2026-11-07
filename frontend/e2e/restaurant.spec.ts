@@ -1,5 +1,55 @@
 import { test, expect } from '@playwright/test';
 
+test('rice portions, priority sides and three separate stall tickets', async ({ page }, info) => {
+  await page.goto('/');
+  const required = (await (await page.request.get('/api/auth/setup-status')).json()).setup_required;
+  await page.getByLabel('员工名称').fill('browser-owner');
+  await page.getByLabel(required ? '设置 6–12 位数字 PIN' : 'PIN 码').fill('928461');
+  if (required) await page.getByLabel('服务器设置令牌').fill('isolated-browser-test-setup-token');
+  await page.getByRole('button', { name: required ? '创建管理员并登录' : '登录', exact: true }).click();
+  const tableName = { 'android-360': 'T18', 'android-390': 'T19', 'android-412': 'T20' }[info.project.name]!;
+  await page.getByRole('button', { name: new RegExp(tableName) }).click();
+  const addDish = async (name: string, large = false, two = false) => {
+    await page.getByRole('button', { name: new RegExp(`^${name} RM`) }).click();
+    await expect(page.getByRole('heading', { name, exact: true })).toBeInViewport();
+    if (large) await page.getByRole('button', { name: /^大份/ }).click();
+    if (two) await page.getByRole('button', { name: '增加数量' }).click();
+    await page.getByRole('button', { name: /^加入草稿/ }).click();
+    await expect(page.getByRole('heading', { name, exact: true })).toHaveCount(0);
+  };
+  await addDish('卤肉饭', true, true);
+  await addDish('海南咖喱饭');
+  await addDish('咖喱饭', true);
+  await addDish('云吞面');
+  await addDish('面粉粿');
+  await page.getByRole('button', { name: /小吃 Snacks/ }).click();
+  await expect(page.locator('.food-grid button').nth(0)).toContainText('卤肉');
+  await expect(page.locator('.food-grid button').nth(1)).toContainText('咖喱鸡');
+  await page.screenshot({ path: info.outputPath('priority-sides.png'), fullPage: true });
+  await addDish('卤肉');
+  await addDish('咖喱鸡');
+  await page.getByRole('button', { name: /饮料 Drinks/ }).click();
+  await addDish('Milo');
+  await expect(page.getByText('预计 RM 73.00')).toBeVisible();
+  const response = page.waitForResponse((entry) => entry.url().endsWith('/submit') && entry.request().method() === 'POST');
+  await page.getByRole('button', { name: '确认下单 / 送档口' }).click();
+  const submitted = await (await response).json();
+  expect(submitted.print_jobs.map((job: { routing_group: string }) => job.routing_group)).toEqual(['KITCHEN', 'RICE', 'BEVERAGE']);
+  await page.getByRole('link', { name: /订单/ }).click();
+  for (const [index, station] of ['面档', '饭档', '饮料档'].entries()) {
+    const card = page.locator('.order-card').filter({ hasText: `任务 #${submitted.print_jobs[index].id}` });
+    await expect(card.getByRole('heading', { name: `桌号 ${tableName}` })).toBeVisible();
+    await expect(card).toContainText(station);
+  }
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath('three-stall-orders.png'), fullPage: true });
+  await page.getByRole('link', { name: /桌台/ }).click();
+  await page.getByRole('button', { name: new RegExp(tableName) }).click();
+  await page.getByRole('button', { name: '查看账单 / 收款' }).click();
+  await page.getByRole('button', { name: '确认收款并清台' }).click();
+  await expect(page.getByRole('article', { name: '客户收据' })).toContainText('RM 73.00');
+});
+
 test('first order, incremental kitchen ticket, cash payment and history', async ({ page }, info) => {
   await page.goto('/');
   const setup = await page.request.get('/api/auth/setup-status');

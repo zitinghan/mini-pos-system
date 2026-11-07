@@ -47,6 +47,8 @@ class PrinterSettings(StrictModel):
     separate_stations: bool = False
     kitchen_host: str = Field(default='', max_length=253)
     kitchen_port: int = Field(default=9100, ge=1, le=65535)
+    rice_host: str = Field(default='', max_length=253)
+    rice_port: int = Field(default=9100, ge=1, le=65535)
     beverage_host: str = Field(default='', max_length=253)
     beverage_port: int = Field(default=9100, ge=1, le=65535)
     receipt_mode: Literal['mock', 'network', 'windows'] = 'mock'

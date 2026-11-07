@@ -57,7 +57,7 @@ export default function Orders() {
         <strong>{job.payment_id ? `收据 R${String(job.payment_id).padStart(6, '0')}` : job.batch_id ? `订单 #${job.batch_id}` : '测试单'} / 任务 #{job.id}</strong>
         <span className={`print-status ${job.status}`}>{label(job.status)}</span>
       </div>
-      <small>{localTime(job.created_at)} · {job.routing_group === 'RECEIPT' ? '收银收据' : job.routing_group === 'BEVERAGE' ? '饮料' : job.routing_group === 'KITCHEN' ? '厨房' : '厨房 / 饮料'} · 尝试 {job.attempts} 次 {job.reprint ? '· 重印' : ''}</small>
+      <small>{localTime(job.created_at)} · {label(job.routing_group ?? 'COMBINED')} · 尝试 {job.attempts} 次 {job.reprint ? '· 重印' : ''}</small>
       {job.error && <p className="error">{translateError(job.error)}</p>}
       <div className="row">
         {job.preview && <button onClick={() => { setReceiptImage(job.document_type === 'RECEIPT'); previewJob(job.id).then(setImage).catch(setError); }}>

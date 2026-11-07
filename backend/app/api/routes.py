@@ -14,6 +14,7 @@ from app.services import orders
 from app.services import promotions
 from app.services import receipts
 from app.printing.jobs import job_data
+from app.printing.stations import STATIONS
 
 router = APIRouter(prefix='/api')
 
@@ -461,7 +462,7 @@ def update_printer(data: PrinterSettings, user=Depends(admin)):
     import codecs
     hosts = []
     if data.mode == 'network':
-        hosts.extend([data.kitchen_host, data.beverage_host] if data.separate_stations else [data.host])
+        hosts.extend([data.kitchen_host, data.rice_host or data.kitchen_host, data.beverage_host] if data.separate_stations else [data.host])
     if data.receipt_mode == 'network':
         hosts.append(data.receipt_host)
     if hosts:
@@ -491,9 +492,10 @@ def test_print(user=Depends(admin)):
     with transaction() as db:
         ticket = {'table': 'TEST', 'time': now(), 'order_type': 'NEW', 'items': [
             {'name': '打印测试', 'quantity': 1, 'printer_group': 'KITCHEN', 'modifiers': [{'name': '黑酱 / 不辣 / 加面'}]},
+            {'name': '饭档打印测试', 'quantity': 1, 'printer_group': 'RICE', 'modifiers': [{'name': '大份'}]},
             {'name': 'Kopi O', 'quantity': 1, 'printer_group': 'BEVERAGE', 'modifiers': [{'name': '冰 ICED'}]}]}
         jobs = [PrintJob(routing_group=station, ticket={**ticket, 'items': [item for item in ticket['items'] if item['printer_group'] == station]})
-                for station in ('KITCHEN', 'BEVERAGE')]
+                for station, _ in STATIONS]
         db.add_all(jobs)
         db.flush()
         db.add(AuditLog(user_id=user['id'], action='TEST_PRINT', details={'job_ids': [job.id for job in jobs]}))

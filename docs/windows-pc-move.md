@@ -81,16 +81,17 @@ For a restored database, log in with the existing administrator name and PIN. Do
 
 Check all 20 tables, a historical paid transaction/receipt, menu prices and the sale/stock settings before taking live orders.
 
-## 5. Configure the three printing destinations
+## 5. Configure the preparation stalls and cashier printer
 
 In **设置 (Settings)**:
 
-- **Kitchen:** mains and snacks. Enter the kitchen printer's private LAN IP and port.
+- **Noodle stall / 面档:** 云吞面、面粉粿 and existing snacks. Enter its private LAN IP and port.
+- **Rice stall / 饭档:** 海南咖喱饭、卤肉饭、咖喱饭 and 卤肉/咖喱鸡 sides. Enable independent stall printers and enter the rice IP/port. Leave it blank to share the noodle printer while still printing a separate ticket.
 - **Kitchen paper:** choose **80mm / 576 dots** for the current 80mm kitchen printer. This selects raster printing so Chinese text and notes wrap to the configured width. Use 58mm only for a 58mm replacement printer.
 - **Drinks:** drinks and beer. Enable independent kitchen/drinks printers and enter the drinks station's private LAN IP/port.
 - **Cashier receipts:** choose **Windows USB 热敏打印机**, select the installed cashier queue (currently named `POS-80C`), and select **55mm / 384 dots** for the receipt printer specified by the operator. The Windows queue name does not establish paper width. Keep cutter off until verified. Alternatively, choose the independent receipt network mode and configure that printer's IP/port.
 
-If kitchen and drinks share one physical printer, leave independent-printer mode off: the app still creates **two separate preparation tickets**, both using that printer. A mixed order never duplicates an item between tickets. Customer receipts always use their own cashier configuration.
+If all preparation stalls share one physical printer, leave independent-printer mode off: the app creates **three separate preparation tickets** when all three stalls have items, all using that printer. Empty stalls do not print. A mixed order never duplicates an item between tickets. Customer receipts always use their own cashier configuration.
 
 The receipt queue is created once with a successful payment. Checkout defaults to QR: verify QR funds, then press the single **确认收款并清台** button. The table is released and the receipt page opens. Cash remains available by selecting **现金** and entering the amount received. Receipts show frozen line prices, total, payment method, received amount and change.
 

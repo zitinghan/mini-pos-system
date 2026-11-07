@@ -34,7 +34,8 @@ def seed():
                 db.flush()
             categories[code] = category
 
-        def install(sku, name, category, price, groups, aliases=(), description='', complimentary=False, verify=False):
+        def install(sku, name, category, price, groups, aliases=(), description='', complimentary=False, verify=False,
+                    printer_group=None, display_order=0):
             if db.scalar(select(MenuItem.id).where(MenuItem.sku == sku)) is not None:
                 return  # Preserve administrator prices, enabled options and conflict rules.
             matches = list(db.scalars(select(MenuItem).where(MenuItem.name.in_([name, *aliases]), MenuItem.sku.is_(None)).order_by(MenuItem.id)))
@@ -43,6 +44,7 @@ def seed():
                 duplicate.active = False
             item.name, item.sku, item.category_id = name, sku, categories[category].id
             item.base_price, item.description, item.complimentary = price, description, complimentary
+            item.printer_group, item.display_order = printer_group, display_order
             item.verification_required = verify
             item.verification_note = '请在营业前核实瓶装水 / 罐装饮料的热、冰供应方式和价格。' if verify else ''
             db.add(item)
@@ -72,7 +74,11 @@ def seed():
         install('WANTAN_MEE', '云吞面', 'MAINS', 800, [choices('酱汁', [('黑酱', 0), ('白酱', 0), ('红酱', 0)]),
                 choices('辣度', [('不辣', 0), ('辣', 0)]), choices('份量', [('普通', 0), ('加面', 200)]), extras])
         install('MEE_HOON_KUEH', '面粉粿', 'MAINS', 800, [choices('做法', [('汤', 0), ('干', 0)]), choices('鸡蛋', [('不加蛋', 0), ('加蛋', 100)]), extras], aliases=('面粉糕',))
-        install('CURRY_RICE', '海南咖喱饭', 'MAINS', 800, [choices('份量', [('普通', 0), ('大份', 200)]), extras], aliases=('咖喱卤肉饭',))
+        install('CURRY_RICE', '海南咖喱饭', 'MAINS', 800, [choices('份量', [('普通', 0), ('大份', 200)]), extras], aliases=('咖喱卤肉饭',), printer_group='RICE')
+        for sku, name in [('BRAISED_PORK_RICE', '卤肉饭'), ('PLAIN_CURRY_RICE', '咖喱饭')]:
+            install(sku, name, 'MAINS', 800, [choices('份量', [('普通', 0), ('大份', 200)]), extras], printer_group='RICE')
+        for priority, (sku, name) in enumerate([('BRAISED_PORK_SIDE', '卤肉'), ('CURRY_CHICKEN_SIDE', '咖喱鸡')]):
+            install(sku, name, 'SNACKS', 800, [], printer_group='RICE', display_order=-20 + priority)
         for sku, name, portion, price in SNACKS:
             install(sku, name, 'SNACKS', price, [], description=portion)
         for sku, name, hot, iced in DRINKS:

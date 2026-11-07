@@ -1,6 +1,6 @@
 # KOKO Mini POS v1.1 — 可可·南洋咖啡店
 
-A local-network point-of-sale system for **可可·南洋咖啡店 (KE KE / KOPITIAM)**. Built for a small Malaysian restaurant using Android phones, 20 dining tables, and a 58mm kitchen receipt printer.
+A local-network point-of-sale system for **可可·南洋咖啡店 (KE KE / KOPITIAM)**. Built for a small Malaysian restaurant using Android phones, 20 dining tables, 80mm preparation tickets and a separate 55mm cashier receipt printer.
 
 Staff select a table, choose food and options, then submit an order to the kitchen. Cashiers review the combined table bill, record payment, and release the table. Normal restaurant operation requires no external internet connection.
 
@@ -24,7 +24,7 @@ Administrators can use **Settings → 售罄管理** to mark products **SOLD OUT
 
 ## Version 1.1 and validation
 
-Version 1.1 adds four touch-friendly categories and 29 products: three mains, seven snacks, 15 paid drinks, complimentary plain water, and three beers. Hot/Iced and beer packages have explicit database prices. Per-dish free customizations, dining duration, category sales analytics, and kitchen/beverage routing extend the existing workflows. See the [complete menu, migration, changed files and release notes](docs/v1.1.md).
+The expanded menu has four touch-friendly categories and 33 products: five mains, nine snacks/sides, 15 paid drinks, complimentary plain water, and three beers. Hot/Iced and beer packages have explicit database prices. Per-dish free customizations, dining duration, category sales analytics, and three-stall routing extend the existing workflows. See the [original v1.1 release notes](docs/v1.1.md) and [rice menu and three-stall update](docs/stalls-and-rice.md).
 
 Validated on Windows on **2026-11-07**:
 

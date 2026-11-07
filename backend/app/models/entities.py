@@ -63,6 +63,8 @@ class MenuItem(Record, Base):
     active: Mapped[bool] = mapped_column(default=True)
     sold_out: Mapped[bool] = mapped_column(default=False)
     sku: Mapped[str | None] = mapped_column(unique=True)
+    printer_group: Mapped[str | None]
+    display_order: Mapped[int] = mapped_column(default=0)
     description: Mapped[str] = mapped_column(default='')
     complimentary: Mapped[bool] = mapped_column(default=False)
     verification_required: Mapped[bool] = mapped_column(default=False)

@@ -8,6 +8,7 @@ from app.core.config import OUTPUT_DIR
 from app.database.db import transaction
 from app.models.entities import PrintJob, PrinterConfiguration, now
 from app.printing.tickets import render, ticket_lines
+from app.printing.stations import STATIONS
 
 logger = logging.getLogger('keke.printing')
 
@@ -35,8 +36,10 @@ def run_once():
                 cutter=config.get('receipt_cutter', False), simulation=config.get('receipt_simulation', 'success'),
                 printer_name=config.get('receipt_printer_name', ''), print_mode='raster', profile='default',
                 raster_command='bitImageRaster')
-        elif job.routing_group in ('KITCHEN', 'BEVERAGE') and config.get('separate_stations', False):
+        elif job.routing_group in dict(STATIONS) and config.get('separate_stations', False):
             station = job.routing_group.lower()
+            if station == 'rice' and not config.get('rice_host'):
+                station = 'kitchen'
             config['host'] = config.get(f'{station}_host') or config.get('host', '')
             config['port'] = config.get(f'{station}_port', config.get('port', 9100))
         job.printer_mode = config['mode']

@@ -147,7 +147,7 @@ def test_repeat_seed_preserves_admin_edits_and_verification(client, headers):
     client.post(f"/api/menu/items/{drink['id']}/verify", headers=headers)
     seed()
     again = catalog(client, headers)
-    assert len(again) == 29
+    assert len(again) == 33
     assert again.keys() == foods.keys()
     assert not again['MINERAL_WATER']['verification_required']
     assert again['MINERAL_WATER']['groups'][0]['options'][1]['unit_price'] == 345
@@ -178,7 +178,7 @@ def test_mixed_4120_bill_rounds_snapshots_and_split_printing(client, headers, mo
         assert len(jobs) == 2
         assert all(job.ticket['order_type'] == 'NEW' for job in jobs)
         text = '\n'.join(line for job in jobs for line, _ in ticket_lines(job.ticket))
-        assert '厨房' in text and '饮料' in text
+        assert '面档' in text and '饮料' in text
         assert text.count('2 x Kopi O') == 1 and '冰 ICED' in text and '冷' in text
     assert run_once()
     monkeypatch.setattr(orders, 'now', lambda: '2026-11-07T04:10:00+00:00')
@@ -281,7 +281,7 @@ def test_daily_duration_average_excludes_unpaid_and_invalid(client, headers):
     assert report['dining_duration'] == {'count': 2, 'average_seconds': 1200, 'minimum_seconds': 600, 'maximum_seconds': 1800}
     assert report['total'] == 2400 and report['methods']['QR'] == 2400
 
-@pytest.mark.parametrize('separate,job_count', [(False, 2), (True, 2)])
+@pytest.mark.parametrize('separate,job_count', [(False, 3), (True, 3)])
 def test_printer_test_routes_to_configured_stations(client, headers, separate, job_count):
     settings = client.get('/api/printers/config', headers=headers).json()
     settings['separate_stations'] = separate
