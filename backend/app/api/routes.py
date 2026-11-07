@@ -15,6 +15,8 @@ from app.services import promotions
 from app.services import receipts
 from app.services import order_edits
 from app.services import table_controls
+from app.services import table_attention
+from app.services import sales
 from app.printing.jobs import job_data
 from app.printing.stations import STATIONS
 
@@ -128,6 +130,8 @@ def tables(user=Depends(current_user)):
             result.append({'id': table.id, 'name': table.name, 'status': visible_status,
                 'session_id': session.id if session else None, 'opened_at': session.opened_at if session else None,
                 'first_order_at': session.first_order_at if session else None,
+                 'wait_alert_due': table_attention.is_due(session),
+                 'wait_alert_acknowledged_at': session.wait_alert_acknowledged_at if session else None,
                 'total': current['total'], 'item_count': current['item_count']})
         return result
 
@@ -156,6 +160,12 @@ def open_table(table_id: int, user=Depends(current_user)):
             db.flush()
         current = orders.bill(db, session.id)
         return {'session_id': session.id, 'status': 'AVAILABLE' if session.status == 'OCCUPIED' and not session.first_order_at and not current['item_count'] else session.status}
+
+
+@router.post('/table-sessions/{identity}/acknowledge-wait')
+def acknowledge_table_wait(identity: int, user=Depends(current_user)):
+    with transaction() as db:
+        return table_attention.acknowledge(db, identity, user)
 
 
 @router.get('/menu')
@@ -557,13 +567,17 @@ def daily_sales(day: date | None = None, user=Depends(admin)):
         breakdown = {code: 0 for code in ('MAINS', 'SNACKS', 'DRINKS', 'BEER')}
         bottles, beer_units = 0, 0
         for payment in payments:
-            for item in orders.bill(db, payment.session_id)['items']:
-                breakdown[item['category_code']] = breakdown.get(item['category_code'], 0) + item['line_total']
+            items = orders.bill(db, payment.session_id)['items']
+            for code, amount in sales.category_sales(items, payment.total).items():
+                breakdown[code] = breakdown.get(code, 0) + amount
+            for item in items:
                 bottles += item['physical_bottles']
                 if item['category_code'] == 'BEER':
                     beer_units += item['quantity']
         total = sum(p.total for p in payments)
+        original_total = sum(p.original_total if p.original_total is not None else p.total for p in payments)
         return {'date': day.isoformat(), 'timezone': 'Asia/Kuala_Lumpur', 'total': total,
+            'original_sales': original_total, 'discounts': original_total-total,
             'transactions': len(payments), 'completed_sessions': len(payments), 'category_sales': breakdown,
             'average_spending': (total + len(payments) // 2) // len(payments) if payments else 0,
             'dining_duration': {'count': len(durations), 'average_seconds': sum(durations) / len(durations) if durations else None,

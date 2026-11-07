@@ -14,6 +14,7 @@ Success responses are typed objects or lists; HTTP errors use `{"detail":"messag
 | GET / POST | `/users` | Admin; list/create named staff or administrators |
 | GET | `/tables`, `/tables/{id}`, `/tables/{id}/active-session` | Staff; status, current session, submitted total and count |
 | POST | `/tables/{id}/open` | Staff; atomically create or return existing active session |
+| POST | `/table-sessions/{id}/acknowledge-wait` | Staff; acknowledge an active session strictly older than 45 minutes from first order; repeat calls return the same timestamp and create only one audit |
 | GET | `/menu`, `/menu/items` | Staff; prices, modifier groups/options/defaults |
 | PATCH | `/menu/items/{id}` | Admin; `{"price":800}` in integer sen |
 | PATCH | `/menu/options/{id}` | Admin; update modifier surcharge |
@@ -30,7 +31,7 @@ Success responses are typed objects or lists; HTTP errors use `{"detail":"messag
 | GET | `/table-sessions/{id}/orders`, `/table-sessions/{id}/bill` | Staff; batches and authoritative submitted bill |
 | POST | `/table-sessions/{id}/checkout`, `/table-sessions/{id}/resume` | Admin; set/clear ordering pause |
 | POST | `/table-sessions/{id}/close-empty` | Admin; cancel empty session and drafts |
-| POST | `/table-sessions/{id}/payments` | Admin; Idempotency-Key required; one full payment |
+| POST | `/table-sessions/{id}/payments` | Admin; Idempotency-Key required; one payment. `expected_total` validates the original bill; optional `final_total` (0 through original, integer sen) and `offer_reason` apply a cashier offer |
 | GET | `/print-jobs`, `/print-jobs/{id}` | Staff; recent queue/history and outcome |
 | GET | `/print-jobs/{id}/preview` | Staff; authenticated PNG response |
 | POST | `/print-jobs/{id}/retry` | Admin; Idempotency-Key required; audited new attempt with REPRINT marker |

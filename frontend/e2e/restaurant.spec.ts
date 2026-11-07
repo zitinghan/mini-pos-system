@@ -1,5 +1,93 @@
 import { test, expect } from '@playwright/test';
 
+test('long-running tables blink until acknowledged and remain red after reload', async ({ page }, info) => {
+  let acknowledged: string | null = null;
+  const started = new Date(Date.now() - 46 * 60000).toISOString();
+  await page.route('**/api/tables', async (route) => {
+    const response = await route.fetch();
+    const tables = await response.json();
+    await route.fulfill({ response, json: tables.map((table: {id:number}) => table.id === 1 ? { ...table,
+      status: 'OCCUPIED', session_id: 901, total: 800, item_count: 1, first_order_at: started,
+      wait_alert_due: true, wait_alert_acknowledged_at: acknowledged } : table) });
+  });
+  await page.route('**/api/table-sessions/901/acknowledge-wait', async (route) => {
+    acknowledged = new Date().toISOString();
+    await route.fulfill({ json: { session_id: 901, wait_alert_acknowledged_at: acknowledged } });
+  });
+  await page.goto('/');
+  const required = (await (await page.request.get('/api/auth/setup-status')).json()).setup_required;
+  await page.getByLabel('员工名称').fill('browser-owner');
+  await page.getByLabel(required ? '设置 6–12 位数字 PIN' : 'PIN 码').fill('928461');
+  if (required) await page.getByLabel('服务器设置令牌').fill('isolated-browser-test-setup-token');
+  await page.getByRole('button', { name: required ? '创建管理员并登录' : '登录', exact: true }).click();
+  const card = page.locator('.table-card').filter({ has: page.locator('.table-name', { hasText: 'T01' }) });
+  await expect(card).toHaveClass(/needs-attention/);
+  await expect(card.locator('.elapsed')).toHaveCSS('color', 'rgb(180, 35, 24)');
+  await expect(card.locator('.elapsed')).toHaveCSS('font-weight', '850');
+  await expect(card).toHaveCSS('animation-name', 'table-attention');
+  await page.screenshot({ path: info.outputPath('table-alert-before.png'), fullPage: true });
+  await card.getByRole('button', { name: 'T01 已留意，停止闪烁' }).click();
+  await expect(card).not.toHaveClass(/needs-attention/);
+  await expect(card).toHaveCSS('border-top-color', 'rgb(180, 35, 24)');
+  await expect(page).toHaveURL('/');
+  await page.reload();
+  await expect(card.getByLabel('已留意，已停止闪烁')).toBeVisible();
+  await expect(card).not.toHaveClass(/needs-attention/);
+  await expect(card.locator('.elapsed')).toHaveCSS('color', 'rgb(180, 35, 24)');
+  await expect(card).toHaveCSS('animation-name', 'none');
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await page.screenshot({ path: info.outputPath('table-alert-acknowledged.png'), fullPage: true });
+});
+
+test('wantan soup snack, bottom table remarks and cashier-entered offer', async ({ page }, info) => {
+  await page.goto('/');
+  const required = (await (await page.request.get('/api/auth/setup-status')).json()).setup_required;
+  await page.getByLabel('员工名称').fill('browser-owner');
+  await page.getByLabel(required ? '设置 6–12 位数字 PIN' : 'PIN 码').fill('928461');
+  if (required) await page.getByLabel('服务器设置令牌').fill('isolated-browser-test-setup-token');
+  await page.getByRole('button', { name: required ? '创建管理员并登录' : '登录', exact: true }).click();
+  await expect(page.getByRole('heading', { name: '选择桌台', exact: true })).toBeVisible();
+  const token = await page.evaluate(() => sessionStorage.getItem('koko-token'));
+  const headers = { Authorization: `Bearer ${token}` };
+  const before = await (await page.request.get('/api/reports/daily-sales', { headers })).json();
+  const table = { 'android-360': 'T13', 'android-390': 'T14', 'android-412': 'T15' }[info.project.name]!;
+  await page.getByRole('button', { name: new RegExp(`^${table}`) }).click();
+  await expect(page.getByLabel('整桌备注（所有轮次）')).toBeAttached();
+  expect(await page.locator('.table-notes').evaluate((section) => section.parentElement?.lastElementChild === section)).toBe(true);
+  await page.getByRole('button', { name: /小吃 Snacks/ }).click();
+  await page.getByRole('button', { name: /^云吞汤 RM/ }).click();
+  await expect(page.getByText('10粒', { exact: true }).last()).toBeVisible();
+  await page.getByRole('button', { name: '增加数量' }).click();
+  await page.getByRole('button', { name: '加入草稿 · RM 16.00' }).click();
+  await page.getByRole('button', { name: /饮料 Drinks/ }).click();
+  await page.getByRole('button', { name: /^Milo RM/ }).click();
+  await page.getByRole('button', { name: '加入草稿 · RM 3.00' }).click();
+  const submitted = page.waitForResponse((response) => response.url().endsWith('/submit') && response.request().method() === 'POST');
+  await page.getByRole('button', { name: '确认下单 / 送档口' }).click();
+  const result = await (await submitted).json();
+  expect(result.print_jobs.map((job: {routing_group:string}) => job.routing_group)).toEqual(['KITCHEN', 'BEVERAGE']);
+  await page.getByRole('button', { name: new RegExp(`^${table}`) }).click();
+  await page.getByRole('button', { name: '查看账单 / 收款' }).click();
+  await page.getByLabel('优惠后总价 (RM)').fill('18.50');
+  await page.getByLabel('优惠备注（选填）').fill('熟客优惠');
+  await page.getByRole('button', { name: '现金', exact: true }).click();
+  await page.getByLabel('收到现金 (RM)').fill('20');
+  await expect(page.getByText('RM 1.50', { exact: true })).toBeVisible();
+  await page.screenshot({ path: info.outputPath('cashier-offer.png'), fullPage: true });
+  await page.getByRole('button', { name: '确认收款并清台' }).click();
+  const receipt = page.getByRole('article', { name: '客户收据' });
+  await expect(receipt).toContainText('2 × 云吞汤');
+  await expect(receipt).toContainText('10粒');
+  await expect(receipt).toContainText('RM 19.00');
+  await expect(receipt).toContainText('RM 18.50');
+  await expect(receipt).toContainText('熟客优惠');
+  const after = await (await page.request.get('/api/reports/daily-sales', { headers })).json();
+  expect(after.total-before.total).toBe(1850);
+  expect(after.discounts-before.discounts).toBe(50);
+  expect(Object.values(after.category_sales).reduce((sum: number, value) => sum + Number(value), 0)).toBe(after.total);
+});
+
 test('wantan soup replaces sauce without a surcharge and prints on the receipt', async ({ page }, info) => {
   await page.goto('/');
   const required = (await (await page.request.get('/api/auth/setup-status')).json()).setup_required;

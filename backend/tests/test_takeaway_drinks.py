@@ -17,7 +17,7 @@ def option(food, group, prefix):
 
 def test_every_product_has_free_mutually_exclusive_takeaway_and_legacy_default(client, headers):
     foods = catalog(client, headers)
-    assert len(foods) == 33
+    assert len(foods) == 34
     with transaction() as db:
         for food in foods.values():
             pack = next(group for group in food['groups'] if group['name'] == '用餐方式')

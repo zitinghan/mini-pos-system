@@ -147,7 +147,7 @@ def test_repeat_seed_preserves_admin_edits_and_verification(client, headers):
     client.post(f"/api/menu/items/{drink['id']}/verify", headers=headers)
     seed()
     again = catalog(client, headers)
-    assert len(again) == 33
+    assert len(again) == 34
     assert again.keys() == foods.keys()
     assert not again['MINERAL_WATER']['verification_required']
     assert again['MINERAL_WATER']['groups'][0]['options'][1]['unit_price'] == 345

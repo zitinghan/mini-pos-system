@@ -26,6 +26,11 @@ export function ReceiptPaper({ receipt }: { receipt: CustomerReceipt }) {
     </div>)}</div>
     {receipt.order_notes?.map((note) => <p className="order-notes" key={note.batch_id}>订单 #{note.batch_id} 备注：{note.notes}</p>)}
     {receipt.table_notes && <p className="order-notes">整桌备注：{receipt.table_notes}</p>}
+    {receipt.original_total != null && receipt.original_total !== receipt.total && <>
+      <div className="receipt-meta"><span>餐点原价</span><strong>{money(receipt.original_total)}</strong></div>
+      <div className="receipt-meta"><span>优惠</span><strong>− {money(receipt.original_total-receipt.total)}</strong></div>
+      {receipt.offer_reason && <p className="order-notes">优惠备注：{receipt.offer_reason}</p>}
+    </>}
     <div className="receipt-total"><strong>合计 TOTAL</strong><strong>{money(receipt.total)}</strong></div>
     <div className="receipt-meta"><span>付款方式</span><strong>{label(receipt.method)}</strong></div>
     <div className="receipt-meta"><span>实收</span><strong>{money(receipt.received)}</strong></div>

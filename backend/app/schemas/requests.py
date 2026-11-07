@@ -54,6 +54,8 @@ class Pay(StrictModel):
     method: Literal['CASH', 'QR', 'OTHER']
     received: int = Field(ge=0, le=10000000)
     expected_total: int = Field(ge=0)
+    final_total: int | None = Field(default=None, ge=0, le=10000000)
+    offer_reason: str = Field(default='', max_length=240)
     discard_drafts: bool = False
 
 class PrinterSettings(StrictModel):

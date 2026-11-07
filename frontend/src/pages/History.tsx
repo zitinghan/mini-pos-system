@@ -15,6 +15,7 @@ export default function History() {
   const history = useQuery({ queryKey: ['transactions', day], queryFn: () => api<Transaction[]>(`/reports/transactions?day=${day}`), enabled: !!day, refetchInterval: 15000 });
   const data = summary.data;
   const metrics = [
+    ['优惠前金额', money(data?.original_sales ?? data?.total ?? 0)], ['优惠合计', money(data?.discounts ?? 0)],
     ['今日营业额', money(data?.total ?? 0)], ['完成桌数', String(data?.completed_sessions ?? 0)],
     ['平均每桌', money(data?.average_spending ?? 0)], ['主食销售', money(data?.category_sales?.MAINS ?? 0)],
     ['小吃销售', money(data?.category_sales?.SNACKS ?? 0)], ['饮料销售', money(data?.category_sales?.DRINKS ?? 0)],
@@ -37,6 +38,9 @@ export default function History() {
       <Lines items={transaction.bill.items} />
       {transaction.bill.table_notes && <p className="order-notes">整桌备注：{transaction.bill.table_notes}</p>}
       {transaction.bill.order_notes?.map((note) => <p className="order-notes" key={note.batch_id}>订单 #{note.batch_id} 备注：{note.notes}</p>)}
+      {transaction.original_total != null && transaction.original_total !== transaction.total && <p>
+        原价 {money(transaction.original_total)} · 优惠 {money(transaction.original_total-transaction.total)}
+        {transaction.offer_reason && ` · ${transaction.offer_reason}`}</p>}
       <p>实收 {money(transaction.received)} · 找零 {money(transaction.change)}</p>
       <small>用餐时长：{duration(transaction.bill.dining_duration_seconds)}</small>
       <Link className="back" to={`/receipts/${transaction.id}`}>查看 / 打印收据</Link>

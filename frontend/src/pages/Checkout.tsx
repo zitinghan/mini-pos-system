@@ -13,6 +13,8 @@ export default function Checkout() {
   const [method, setMethod] = useState('QR');
   const [received, setReceived] = useState('');
   const [discard, setDiscard] = useState(false);
+  const [offer, setOffer] = useState<{ original: number; value: string } | null>(null);
+  const [offerReason, setOfferReason] = useState('');
   const bill = useQuery({
     queryKey: ['bill', id],
     queryFn: () => api<Bill>(`/table-sessions/${id}/bill`),
@@ -20,6 +22,9 @@ export default function Checkout() {
   });
   const sen = parseSen(received);
   const total = bill.data?.total ?? 0;
+  const finalText = offer?.original === total ? offer.value : (total / 100).toFixed(2);
+  const finalTotal = parseSen(finalText);
+  const validOffer = finalTotal !== null && finalTotal <= total;
   const hasDrafts = bill.data?.has_drafts ?? false;
   useEffect(() => {
     setDiscard(false);
@@ -28,9 +33,10 @@ export default function Checkout() {
     mutationFn: () => {
       const payload = {
         method,
-        received: method === 'CASH' ? (sen ?? (total === 0 ? 0 : null)) : total,
+        received: method === 'CASH' ? (sen ?? (finalTotal === 0 ? 0 : null)) : finalTotal,
         expected_total: total,
         discard_drafts: discard,
+        ...(finalTotal !== total ? { final_total: finalTotal, offer_reason: offerReason.trim() } : {}),
       };
       // An uncertain response retains the same identity after retry or reload.
       const key = requestKey(`pay:${id}:${JSON.stringify(payload)}`);
@@ -50,8 +56,8 @@ export default function Checkout() {
 
   if (bill.isPending) return <><Loading /><ErrorBox error={bill.error} /></>;
   const blocked = bill.isError || pay.isPending || !bill.data?.item_count || bill.data?.status !== 'PAYMENT_PENDING'
-    || (bill.data?.has_drafts && !discard)
-    || (method === 'CASH' && ((total > 0 && sen === null) || (sen !== null && sen < total)));
+    || (bill.data?.has_drafts && !discard) || !validOffer
+    || (method === 'CASH' && ((finalTotal! > 0 && sen === null) || (sen !== null && sen < finalTotal!)));
 
   return (
     <>
@@ -66,7 +72,19 @@ export default function Checkout() {
         <Lines items={bill.data?.items ?? []} />
         {bill.data?.table_notes && <p className="order-notes">整桌备注：{bill.data.table_notes}</p>}
         {bill.data?.order_notes?.map((note) => <p className="order-notes" key={note.batch_id}>订单 #{note.batch_id} 备注：{note.notes}</p>)}
-        <div className="row spread"><h2>应收总额</h2><h1>{money(total)}</h1></div>
+        <div className="row spread"><span>餐点原价</span><strong>{money(total)}</strong></div>
+        <label>优惠后总价 (RM)<input inputMode="decimal" value={finalText} disabled={pay.isPending}
+          onChange={(event) => setOffer({ original: total, value: event.target.value })} /></label>
+        <small>收银员可直接输入优惠后的最终总额，范围 RM 0.00 至 {money(total)}；餐点原价保留。</small>
+        {!validOffer && <p className="error" role="alert">请输入不高于原价的有效金额，最多两位小数。</p>}
+        {validOffer && finalTotal! < total && <>
+          <div className="row spread"><span>优惠</span><strong>− {money(total-finalTotal!)}</strong></div>
+          <label>优惠备注（选填）<input maxLength={240} value={offerReason} disabled={pay.isPending}
+            onChange={(event) => setOfferReason(event.target.value)} /></label>
+        </>}
+        {offer?.original === total && <button className="quiet" disabled={pay.isPending}
+          onClick={() => { setOffer(null); setOfferReason(''); }}>恢复原价</button>}
+        <div className="row spread"><h2>应收总额</h2><h1>{validOffer ? money(finalTotal!) : '请检查金额'}</h1></div>
         <div className="option-grid">
           {[['CASH', '现金'], ['QR', '二维码'], ['OTHER', '其他']].map(([value, name]) => (
             <button key={value} className={method === value ? 'selected' : ''}
@@ -81,7 +99,7 @@ export default function Checkout() {
           </label>
           <div className="row spread">
             <strong>应找零</strong>
-            <strong>{sen !== null && sen >= total ? money(sen - total) : '金额不足或格式有误'}</strong>
+            <strong>{validOffer && sen !== null && sen >= finalTotal! ? money(sen - finalTotal!) : '金额不足或格式有误'}</strong>
           </div>
         </> : <p className="muted">请核实款项到账后点击收款。系统会直接完成收款、清台并生成收据。</p>}
         {bill.data?.has_drafts && (

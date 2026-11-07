@@ -12,8 +12,8 @@ def test_migrate_seed_and_restart_without_data_loss(tmp_path):
         assert result.returncode == 0, result.stderr
     with sqlite3.connect(path) as db:
         assert db.execute('SELECT COUNT(*) FROM restaurant_tables').fetchone()[0] == 20
-        assert db.execute('SELECT COUNT(*) FROM menu_items').fetchone()[0] == 33
-        assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0] == '0007_table_controls'
+        assert db.execute('SELECT COUNT(*) FROM menu_items').fetchone()[0] == 34
+        assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0] == '0009_cashier_offer'
         assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
 
 
@@ -38,10 +38,12 @@ def test_v1_upgrade_preserves_paid_history_and_adopts_legacy_names(tmp_path):
         result = subprocess.run([sys.executable, '-m', 'app.database.initialize'], env=env, capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
     with sqlite3.connect(path) as db:
-        assert db.execute('SELECT * FROM payments').fetchall() == original_payment
+        assert [row[:len(original_payment[0])] for row in db.execute('SELECT * FROM payments')] == original_payment
         assert [row[:11] for row in db.execute('SELECT * FROM order_items')] == original_item
         assert db.execute("SELECT id, name FROM menu_items WHERE sku = 'MEE_HOON_KUEH'").fetchone() == (1, '面粉粿')
         assert db.execute("SELECT COUNT(*) FROM menu_items WHERE active = 1 AND name IN ('面粉糕', '面粉粿')").fetchone()[0] == 1
         assert db.execute('SELECT opened_at, first_order_at, paid_at FROM table_sessions').fetchone() == (created, submitted, paid)
+        assert db.execute('SELECT original_total, offer_reason FROM payments').fetchone() == (900, '')
+        assert db.execute('SELECT wait_alert_acknowledged_at FROM table_sessions').fetchone() == (None,)
         assert db.execute('PRAGMA foreign_key_check').fetchall() == []
         assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'

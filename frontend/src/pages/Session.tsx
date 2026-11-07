@@ -310,14 +310,6 @@ export default function Session() {
         <strong>{money(bill.data?.total ?? 0)}</strong>
       </div>
       <ErrorBox error={error || bill.error || batches.error || menu.error || (!editing && edit.error)} />
-      <ErrorBox error={saveTableNotes.error} />
-      {bill.data?.metadata_revision != null && <section className="card stack">
-        <label>整桌备注（所有轮次）<textarea rows={2} maxLength={500} disabled={!active} value={tableNotes ?? bill.data.table_notes ?? ''}
-          onChange={(event) => setTableNotes(event.target.value)} placeholder="例如：赶时间、先上饮料" /></label>
-        <button disabled={!active || saveTableNotes.isPending || tableNotes === null || tableNotes === (bill.data.table_notes ?? '')}
-          onClick={() => saveTableNotes.mutate()}>保存整桌备注</button>
-        <small>下单后也可修改。只发送备注更新通知，不会重复制作餐点。</small>
-      </section>}
       {bill.data?.status === 'PAYMENT_PENDING' && (
         <div className="notice" role="status">
           <p>此桌正在结账。需要加单时，请收银员恢复点餐。</p>
@@ -400,6 +392,14 @@ export default function Session() {
           <Lines items={batch.items.filter((item) => item.status === 'DRAFT')} />
         </section>
       ))}
+      {bill.data?.metadata_revision != null && <section className="card stack table-notes">
+        <label>整桌备注（所有轮次）<textarea rows={2} maxLength={500} disabled={!active} value={tableNotes ?? bill.data.table_notes ?? ''}
+          onChange={(event) => setTableNotes(event.target.value)} placeholder="例如：赶时间、先上饮料" /></label>
+        <ErrorBox error={saveTableNotes.error} />
+        <button disabled={!active || saveTableNotes.isPending || tableNotes === null || tableNotes === (bill.data.table_notes ?? '')}
+          onClick={() => saveTableNotes.mutate()}>保存整桌备注</button>
+        <small>下单后也可修改。只发送备注更新通知，不会重复制作餐点。</small>
+      </section>}
       {editing && <div className="modal" role="dialog" aria-modal="true" aria-label="修改餐点"
         onClick={(event) => { if (event.target === event.currentTarget) setEditing(null); }}>
         <div className="stack"><button onClick={() => setEditing(null)}>关闭编辑</button>

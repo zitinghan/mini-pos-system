@@ -217,11 +217,15 @@ def submission_result(db, batch):
 
 
 def payment_data(payment):
-    return {k: getattr(payment, k) for k in ('id', 'session_id', 'method', 'total', 'received', 'change', 'created_at')}
+    return {k: getattr(payment, k) for k in ('id', 'session_id', 'method', 'total', 'original_total', 'offer_reason', 'received', 'change', 'created_at')}
 
 
 def pay(db, session_id, data, key, user):
-    fingerprint = hashlib.sha256(json.dumps({'session_id': session_id, **data.model_dump()}, sort_keys=True).encode()).hexdigest()
+    details = data.model_dump()
+    # Keep pre-upgrade retry identities valid when no offer was requested.
+    if details['final_total'] is None: details.pop('final_total')
+    if not details['offer_reason']: details.pop('offer_reason')
+    fingerprint = hashlib.sha256(json.dumps({'session_id': session_id, **details}, sort_keys=True).encode()).hexdigest()
     previous = db.scalar(select(Payment).where(Payment.idempotency_key == key))
     if previous:
         if previous.request_hash != fingerprint:
@@ -233,23 +237,28 @@ def pay(db, session_id, data, key, user):
         raise HTTPException(422, 'Cannot pay an empty table')
     if current['total'] != data.expected_total:
         raise HTTPException(409, 'Bill changed; refresh before collecting payment')
+    total = current['total'] if data.final_total is None else data.final_total
+    if total > current['total']:
+        raise HTTPException(422, '优惠后总价不可高于原价。')
     if current['has_drafts'] and not data.discard_drafts:
         raise HTTPException(409, 'Unsubmitted drafts exist; submit or explicitly discard them')
-    if data.method == 'CASH' and data.received < current['total']:
+    if data.method == 'CASH' and data.received < total:
         raise HTTPException(422, 'Insufficient cash')
     if current['has_drafts']:
         for draft in db.scalars(select(OrderBatch).where(OrderBatch.session_id == session_id, OrderBatch.status == 'DRAFT')):
             draft.status = 'CANCELLED'
             for item in db.scalars(select(OrderItem).where(OrderItem.batch_id == draft.id)):
                 item.status = 'CANCELLED'
-    received = data.received if data.method == 'CASH' else current['total']
+    received = data.received if data.method == 'CASH' else total
     payment = Payment(session_id=session_id, user_id=user['id'], idempotency_key=key, request_hash=fingerprint,
-        method=data.method, total=current['total'], received=received, change=received-current['total'])
+        method=data.method, original_total=current['total'], total=total, offer_reason=data.offer_reason.strip() if total != current['total'] else '',
+        received=received, change=received-total)
     db.add(payment)
     timestamp = now()
     payment.created_at = timestamp
     session.status, session.closed_at, session.paid_at = 'PAID', timestamp, timestamp
-    db.add(AuditLog(user_id=user['id'], action='PAYMENT', details={'session_id': session_id, 'method': data.method, 'total': current['total']}))
+    db.add(AuditLog(user_id=user['id'], action='PAYMENT', details={'session_id': session_id, 'method': data.method,
+        'original_total': current['total'], 'total': total, 'discount': current['total']-total, 'offer_reason': payment.offer_reason}))
     db.flush()
     # Receipt and print outbox commit with payment, never after a successful response.
     from app.services.receipts import queue_original

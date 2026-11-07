@@ -15,7 +15,11 @@ To add food, reopen the occupied table and repeat. Existing submitted items rema
 
 Opening a table or saving a draft keeps it 空桌; successful order submission marks it 用餐中. Before payment, 修改 is also available on submitted items. Saving creates an audited 更改单 for the affected stall, showing old and new content; notify that stall. Paid transactions cannot be edited. See [order remarks and editing rules](order-editing.md).
 
+After more than 45 minutes from the first submitted order, the table's time becomes bold red and its border flashes red. Tap 已留意 on that card after checking the table or serving the food. The flashing stops for all devices (other phones refresh within 4 seconds); red time/border remain as a duration indicator. This does not open the ordering screen, change the bill or clear the table. A new session after clearing starts without an acknowledgement. Devices requesting reduced motion show a steady red alert instead of animation.
+
 For a customer who cancels after waiting, use 取消此项 beside the food, or 取消整桌 to cancel all remaining unpaid food/drafts and release the table. Select 等候太久 and confirm. The appropriate stalls get cancellation notices; original records remain available. Edit 整桌备注 at any time before payment, or use 修改本轮备注 / 付款标记 for a specific round. 本轮已付款（仅手动标记） is only a label and does not record revenue or release the table. See [table controls and new menu choices](table-controls.md).
+
+整桌备注（所有轮次） is at the bottom of the ordering page, after the bill and any other staff drafts. 小吃 also includes 云吞汤 (10粒, RM8); quantity/takeaway are available and it routes to the noodle stall.
 
 Every item has 堂食 / 打包 at the top of its options; choose 打包 for takeaway. Prepared drinks also offer Kosong（不加糖）or Siu Dai（少甜）, with optional Kao（加浓）. Iced drinks offer 少冰 / 去冰; switching to hot clears the ice adjustment. These choices do not add a fee and appear on the appropriate stall ticket and cashier receipt. Bottled/canned drinks, plain water and beer keep only their relevant temperature/package and takeaway choices. See [takeaway and drink options](takeaway-and-drinks.md).
 
@@ -24,10 +28,12 @@ Order/bill lines and new thermal receipts omit the free neutral labels 不加蛋
 ## Cashier checkout
 
 1. Open the table and tap 查看账单 / 收款.
-2. Verify every submitted item and 应收总额.
+2. Verify every submitted item and 应收总额. For an offer, enter 优惠后总价 (RM) directly (RM0 up to the original total, at most two decimal places). An optional 优惠备注 explains the offer; 恢复原价 removes it. If another device changes the bill total, the input returns to the current original total for review.
 3. 二维码 is selected by default. Verify funds yourself, or choose 现金 or 其他. For cash, enter ringgit, such as `50.00`; the app shows change and rejects insufficient amounts.
 4. If drafts remain, go back to submit them or explicitly acknowledge discarding all table drafts.
 5. Tap 确认收款并清台 once. The table becomes available, its cashier receipt is queued and the receipt page opens. The completed transaction remains in 营业记录.
+
+Food prices and kitchen tickets retain the original amounts. Customer receipts and transaction history show original total, offer and final payment. Daily sales/cash/QR totals use actual payment; category revenue shares the offer proportionally, rounded in integer sen so categories sum exactly to actual sales. 优惠前金额 and 优惠合计 are shown separately. Only cashiers/admins can record an offer; completed payments remain locked.
 
 For an accidentally opened empty table, an administrator can use 取消草稿并释放空桌. A table with submitted billable items must be paid; staff cannot erase submitted sales.
 

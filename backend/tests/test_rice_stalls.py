@@ -34,7 +34,7 @@ def test_new_sides_are_first_and_reseeding_preserves_edits(client, headers):
     client.patch(f"/api/menu/items/{sides[0]['id']}", headers=headers, json={'price': 850})
     seed(); seed()
     again = catalog(client, headers)
-    assert len(again) == 33 and again['BRAISED_PORK_SIDE']['base_price'] == 850
+    assert len(again) == 34 and again['BRAISED_PORK_SIDE']['base_price'] == 850
     assert again['BRAISED_PORK_SIDE']['id'] == sides[0]['id']
 
 

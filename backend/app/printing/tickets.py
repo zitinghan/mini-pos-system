@@ -101,6 +101,11 @@ def receipt_lines(receipt, reprint=False):
         lines.append((f"订单 #{note['batch_id']} 备注 {note['notes']}", 26))
     if receipt.get('table_notes'):
         lines.append((f"整桌备注 {receipt['table_notes']}", 26))
+    if receipt.get('original_total', receipt['total']) != receipt['total']:
+        lines.extend([(f"原价 {money(receipt['original_total'])}", 28),
+            (f"优惠 -{money(receipt['original_total'] - receipt['total'])}", 28)])
+        if receipt.get('offer_reason'):
+            lines.append((f"优惠备注 {receipt['offer_reason']}", 26))
     lines.extend([('========================', 20), (f"合计 {money(receipt['total'])}", 36),
         (method, 26), (f"实收 {money(receipt['received'])}", 28), (f"找零 {money(receipt['change'])}", 28),
         ('谢谢光临 / THANK YOU', 22)])

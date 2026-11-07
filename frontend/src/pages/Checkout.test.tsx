@@ -41,4 +41,28 @@ describe('single-step QR checkout', () => {
     render(<View />);
     expect(screen.getByRole('button', { name: '确认收款并清台' })).toBeEnabled();
   });
+  it('uses an entered offer for cash validation and resets it when the bill changes', async () => {
+    const view = render(<View />);
+    fireEvent.change(screen.getByLabelText('优惠后总价 (RM)'), { target: { value: '20.00' } });
+    expect(screen.getByRole('heading', { name: 'RM 20.00' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: '现金' }));
+    fireEvent.change(screen.getByLabelText('收到现金 (RM)'), { target: { value: '25.00' } });
+    expect(screen.getByText('RM 5.00')).toBeVisible();
+    expect(screen.getByRole('button', { name: '确认收款并清台' })).toBeEnabled();
+    state.total = 3000;
+    await act(async () => { view.rerender(<View />); });
+    expect(screen.getByLabelText('优惠后总价 (RM)')).toHaveValue('30.00');
+    expect(screen.getByRole('button', { name: '确认收款并清台' })).toBeDisabled();
+  });
+  it('rejects invalid offers, permits a full discount and restores the original amount', () => {
+    render(<View />);
+    for (const value of ['30.00', '-1', '1.234', '']) {
+      fireEvent.change(screen.getByLabelText('优惠后总价 (RM)'), { target: { value } });
+      expect(screen.getByRole('button', { name: '确认收款并清台' })).toBeDisabled();
+    }
+    fireEvent.change(screen.getByLabelText('优惠后总价 (RM)'), { target: { value: '0' } });
+    expect(screen.getByRole('button', { name: '确认收款并清台' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: '恢复原价' }));
+    expect(screen.getByLabelText('优惠后总价 (RM)')).toHaveValue('29.00');
+  });
 });

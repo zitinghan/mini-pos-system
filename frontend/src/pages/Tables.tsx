@@ -21,6 +21,15 @@ export default function Tables() {
       navigate(`/session/${data.session_id}`);
     },
   });
+  const acknowledge = useMutation({
+    mutationFn: (sessionId: number) => api<{ session_id: number; wait_alert_acknowledged_at: string }>(
+      `/table-sessions/${sessionId}/acknowledge-wait`, 'POST'),
+    onSuccess: (result) => {
+      client.setQueryData<Table[]>(['tables'], (tables) => tables?.map((table) => table.session_id === result.session_id
+        ? { ...table, wait_alert_acknowledged_at: result.wait_alert_acknowledged_at } : table));
+      void client.invalidateQueries({ queryKey: ['tables'] });
+    },
+  });
 
   return (
     <>
@@ -29,11 +38,12 @@ export default function Tables() {
         <span className="pill">每 4 秒更新</span>
       </div>
       <div className="legend"><span>● 空桌</span><span>● 用餐中</span><span>● 待结账</span></div>
-      <ErrorBox error={query.error || open.error} />
+      <ErrorBox error={query.error || open.error || acknowledge.error} />
       {query.isPending && <Loading />}
       <div className="table-grid">
         {query.data?.map((table) => (
-          <button className={`table-card ${table.status}`} key={table.id}
+          <div className={`table-card ${table.status}${table.wait_alert_due ? ' wait-alert' : ''}${table.wait_alert_due && !table.wait_alert_acknowledged_at ? ' needs-attention' : ''}`} key={table.id}>
+          <button className={`table-open ${table.status}`}
             disabled={open.isPending}
             onClick={() => table.session_id
               ? navigate(`/session/${table.session_id}`)
@@ -41,8 +51,13 @@ export default function Tables() {
             <span className="table-name">{table.name}</span>
             <span className="status">{label(table.status)}</span>
             <strong>{money(table.total)}</strong>
-            <small>{table.item_count} 份 · {table.first_order_at ? elapsed(table.first_order_at) : '尚未下单'}</small>
+            <small>{table.item_count} 份 · <span className={table.wait_alert_due ? 'elapsed overdue' : 'elapsed'}>{table.first_order_at ? elapsed(table.first_order_at) : '尚未下单'}</span></small>
           </button>
+          {table.wait_alert_due && (table.wait_alert_acknowledged_at
+            ? <small className="attention-acknowledged" aria-label="已留意，已停止闪烁">已留意</small>
+            : <button className="attention-ack" aria-label={`${table.name} 已留意，停止闪烁`}
+              disabled={acknowledge.isPending} onClick={() => acknowledge.mutate(table.session_id!)}>已留意</button>)}
+          </div>
         ))}
       </div>
     </>

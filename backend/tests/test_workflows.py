@@ -62,7 +62,7 @@ def test_acceptance_a_b_c_and_price_snapshot(client, headers):
     assert run_once()
     first_job = client.get('/api/print-jobs', headers=headers).json()[0]
     assert first_job['status'] == 'SENT'
-    ticket = (OUTPUT_DIR / f"job-{first_job['id']}.txt").read_text()
+    ticket = (OUTPUT_DIR / f"job-{first_job['id']}.txt").read_text(encoding='utf-8')
     assert '2 x 云吞面' in ticket and '辣' in ticket and '加面' in ticket
     assert 'RM' not in ticket
     second = draft(client, headers, session)
@@ -71,7 +71,7 @@ def test_acceptance_a_b_c_and_price_snapshot(client, headers):
     assert submit(client, headers, second).json()['total'] == 900
     assert run_once()
     second_job = client.get('/api/print-jobs', headers=headers).json()[0]
-    ticket = (OUTPUT_DIR / f"job-{second_job['id']}.txt").read_text()
+    ticket = (OUTPUT_DIR / f"job-{second_job['id']}.txt").read_text(encoding='utf-8')
     assert '面粉粿' in ticket and '2 x 云吞面' not in ticket
     assert client.patch('/api/menu/items/1', headers=headers, json={'price': 1500}).status_code == 200
     bill = client.get(f'/api/table-sessions/{session}/bill', headers=headers).json()
@@ -166,7 +166,7 @@ def test_printer_failures_and_manual_reprint(client, headers, simulation, status
     assert retry.status_code == 201
     assert client.post(f'/api/print-jobs/{job_id}/retry',headers=key(headers)).status_code == 409
     assert run_once()
-    ticket = (OUTPUT_DIR / f"job-{retry.json()['id']}.txt").read_text()
+    ticket = (OUTPUT_DIR / f"job-{retry.json()['id']}.txt").read_text(encoding='utf-8')
     assert ticket.startswith('REPRINT / 重印')
     assert client.get(f'/api/print-jobs/{job_id}', headers=headers).json()['status'] == status
 

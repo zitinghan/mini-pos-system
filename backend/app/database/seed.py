@@ -15,7 +15,7 @@ DRINKS = [('KOPI_O', 'Kopi O', 230, 260), ('KOPI', 'Kopi', 250, 280), ('KOPI_C',
 SNACKS = [('FRIED_WANTAN', '炸云吞', '10粒', 700), ('PORK_BALLS', '炸猪肉圆', '10粒', 700),
           ('FISH_BALLS', '炸鱼圆', '10粒', 700), ('SPRING_ROLLS', '炸春卷', '3条', 700),
           ('FRIES', '炸薯条', '1盘', 700), ('ANCHOVIES', '炸江鱼仔', '1盘', 700),
-          ('BRAISED', '卤味拼盘', '卤肉 + 卤蛋 + 卤豆腐', 1500)]
+            ('BRAISED', '卤味拼盘', '卤肉 + 卤蛋 + 卤豆腐', 1500), ('WANTAN_SOUP', '云吞汤', '10粒', 800)]
 BEERS = [('CARLSBERG', 'Carlsberg', 2200, 6000), ('TIGER', 'Tiger', 2100, 5700), ('GUINNESS', 'Guinness Stout', 2400, 6600)]
 EXTRAS = ['不要青葱', '不要菜', '换成鱼圆', '加咖喱汁']
 

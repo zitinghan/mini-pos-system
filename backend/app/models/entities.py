@@ -47,6 +47,7 @@ class TableSession(Record, Base):
     paid_at: Mapped[str | None]
     notes: Mapped[str] = mapped_column(default='')
     metadata_revision: Mapped[int] = mapped_column(default=1)
+    wait_alert_acknowledged_at: Mapped[str | None]
     __table_args__ = (Index('uq_active_table', 'table_id', unique=True, sqlite_where=text("status IN ('OCCUPIED','PAYMENT_PENDING')")), CheckConstraint("status IN ('OCCUPIED','PAYMENT_PENDING','PAID','CANCELLED')"))
 
 class MenuCategory(Record, Base):
@@ -163,6 +164,8 @@ class Payment(Record, Base):
     request_hash: Mapped[str]
     method: Mapped[str]
     total: Mapped[int]
+    original_total: Mapped[int | None]
+    offer_reason: Mapped[str] = mapped_column(default='')
     received: Mapped[int]
     change: Mapped[int]
     __table_args__ = (

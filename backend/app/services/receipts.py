@@ -12,6 +12,8 @@ def build(db, payment):
         'receipt_number': f'R{payment.id:06d}', 'payment_id': payment.id, 'session_id': payment.session_id,
         'table': current['table'], 'time': payment.created_at, 'cashier': cashier.name if cashier else '',
         'currency': 'MYR', 'items': current['items'], 'order_notes': current['order_notes'], 'table_notes': current['table_notes'], 'total': payment.total,
+        'original_total': payment.original_total if payment.original_total is not None else payment.total,
+        'offer_reason': payment.offer_reason,
         'received': payment.received, 'change': payment.change, 'method': payment.method,
         'dining_duration_seconds': current['dining_duration_seconds']}
 
