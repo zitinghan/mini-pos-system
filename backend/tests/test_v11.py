@@ -30,7 +30,7 @@ def selections(food, *names):
 
 
 @pytest.mark.parametrize('sauce', ['黑酱', '白酱', '红酱', '汤'])
-@pytest.mark.parametrize('spicy', ['辣', '不辣'])
+@pytest.mark.parametrize('spicy', ['辣', '不辣', '少辣'])
 @pytest.mark.parametrize('portion,price', [('普通', 800), ('加面', 1000)])
 def test_wantan_all_combinations(client, headers, sauce, spicy, portion, price):
     food = catalog(client, headers)['WANTAN_MEE']

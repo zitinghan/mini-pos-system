@@ -73,7 +73,7 @@ def seed():
 
         extras = ('免费定制', 0, 4, [(name, 0, None, 0) for name in EXTRAS])
         install('WANTAN_MEE', '云吞面', 'MAINS', 800, [choices('酱汁', [('黑酱', 0), ('白酱', 0), ('红酱', 0), ('汤', 0)]),
-                choices('辣度', [('不辣', 0), ('辣', 0)]), choices('份量', [('普通', 0), ('加面', 200)]), extras])
+                choices('辣度', [('不辣', 0), ('辣', 0), ('少辣', 0)]), choices('份量', [('普通', 0), ('加面', 200)]), extras])
         install('MEE_HOON_KUEH', '面粉粿', 'MAINS', 800, [choices('做法', [('汤', 0), ('干', 0)]), choices('鸡蛋', [('不加蛋', 0), ('加蛋', 100)]), extras], aliases=('面粉糕',))
         install('CURRY_RICE', '海南咖喱饭', 'MAINS', 800, [choices('份量', [('普通', 0), ('大份', 200)]), extras], aliases=('咖喱卤肉饭',), printer_group='RICE')
         for sku, name in [('BRAISED_PORK_RICE', '卤肉饭'), ('PLAIN_CURRY_RICE', '咖喱饭')]:
@@ -111,13 +111,14 @@ def seed():
                 continue
             ensure_optional_choices(item, '用餐方式', 100, [('堂食', True), ('打包', False)])
             if item.sku == 'WANTAN_MEE':
-                sauce = db.scalar(select(ModifierGroup).join(MenuItemModifierGroup, MenuItemModifierGroup.group_id == ModifierGroup.id)
-                    .where(MenuItemModifierGroup.item_id == item.id, ModifierGroup.name == '酱汁'))
-                if sauce is not None:
-                    options = list(db.scalars(select(ModifierOption).where(ModifierOption.group_id == sauce.id)))
-                    if not any(option.name == '汤' for option in options):
-                        db.add(ModifierOption(group_id=sauce.id, name='汤', price=0, is_default=False,
-                            display_order=max((option.display_order for option in options), default=-1) + 1))
+                for group_name, option_name in [('酱汁', '汤'), ('辣度', '少辣')]:
+                    group = db.scalar(select(ModifierGroup).join(MenuItemModifierGroup, MenuItemModifierGroup.group_id == ModifierGroup.id)
+                        .where(MenuItemModifierGroup.item_id == item.id, ModifierGroup.name == group_name))
+                    if group is not None:
+                        options = list(db.scalars(select(ModifierOption).where(ModifierOption.group_id == group.id)))
+                        if not any(option.name == option_name for option in options):
+                            db.add(ModifierOption(group_id=group.id, name=option_name, price=0, is_default=False,
+                                display_order=max((option.display_order for option in options), default=-1) + 1))
             if item.sku == 'MEE_HOON_KUEH':
                 ensure_optional_choices(item, '份量', 10, [('普通', True), ('大份', False)], prices={'大份': 200})
                 dine_ids = list(db.scalars(select(ModifierOption.id).join(ModifierGroup, ModifierGroup.id == ModifierOption.group_id)

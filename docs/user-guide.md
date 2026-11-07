@@ -23,6 +23,8 @@ When 本轮已付款 is checked, 本轮付款方式 offers QR, 现金 Cash and �
 
 整桌备注（所有轮次） is at the bottom of the ordering page, after the bill and any other staff drafts. 小吃 also includes 云吞汤 (10粒, RM8); quantity/takeaway are available and it routes to the noodle stall.
 
+云吞面的辣度 offers 不辣 / 辣 / 少辣 as one exclusive choice. 少辣 is free and is not selected automatically; it appears on cart, preparation/correction tickets and saved receipts. Existing defaults and historical orders are retained.
+
 面粉粿 / 面粉糕 offers **汤分开** under 打包设置 only after choosing 打包. It is optional, not selected automatically and has no surcharge. Returning to 堂食 clears it. The selection appears on cart, preparation tickets and receipts; ordinary/large/egg pricing remains unchanged.
 
 Every item has 堂食 / 打包 at the top of its options; choose 打包 for takeaway. Prepared drinks also offer Kosong（不加糖）or Siu Dai（少甜）, with optional Kao（加浓）. Iced drinks offer 少冰 / 去冰; switching to hot clears the ice adjustment. These choices do not add a fee and appear on the appropriate stall ticket and cashier receipt. Bottled/canned drinks, plain water and beer keep only their relevant temperature/package and takeaway choices. See [takeaway and drink options](takeaway-and-drinks.md).

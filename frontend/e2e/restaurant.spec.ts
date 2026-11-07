@@ -1,5 +1,30 @@
 import { test, expect } from '@playwright/test';
 
+test('wantan less-spicy choice is exclusive free and appears on the receipt',async({page})=>{
+  await page.goto('/');
+  const required=(await (await page.request.get('/api/auth/setup-status')).json()).setup_required;
+  await page.getByLabel('员工名称').fill('browser-owner');
+  await page.getByLabel(required?'设置 6–12 位数字 PIN':'PIN 码').fill('928461');
+  if(required)await page.getByLabel('服务器设置令牌').fill('isolated-browser-test-setup-token');
+  await page.getByRole('button',{name:required?'创建管理员并登录':'登录',exact:true}).click();
+  await page.getByRole('button',{name:/^T20/}).click();
+  await page.getByRole('button',{name:/^云吞面 RM/}).click();
+  await expect(page.getByRole('button',{name:'不辣',exact:true})).toHaveAttribute('aria-pressed','true');
+  await page.getByRole('button',{name:'少辣',exact:true}).click();
+  await expect(page.getByRole('button',{name:'不辣',exact:true})).toHaveAttribute('aria-pressed','false');
+  await expect(page.getByRole('button',{name:'辣',exact:true})).toHaveAttribute('aria-pressed','false');
+  await expect(page.getByRole('button',{name:'加入草稿 · RM 8.00'})).toBeEnabled();
+  await page.getByRole('button',{name:/^加面/}).click();
+  await page.getByRole('button',{name:'加入草稿 · RM 10.00'}).click();
+  await expect(page.locator('.line').first()).toContainText('少辣');
+  await page.getByRole('button',{name:'确认下单 / 送档口'}).click();
+  await page.getByRole('button',{name:/^T20/}).click();
+  await page.getByRole('button',{name:'查看账单 / 收款'}).click();
+  await page.getByRole('button',{name:'确认收款并清台'}).click();
+  await expect(page.getByRole('article',{name:'客户收据'})).toContainText('少辣');
+  await expect(page.getByRole('article',{name:'客户收据'})).toContainText('RM 10.00');
+});
+
 test('paid-first methods can be selected and edited after ordering without recording a payment',async({page},info)=>{
   await page.goto('/');
   const required=(await (await page.request.get('/api/auth/setup-status')).json()).setup_required;
