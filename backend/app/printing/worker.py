@@ -3,7 +3,7 @@ import logging
 import socket
 import time
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select, exists
+from sqlalchemy import select, exists, or_
 from sqlalchemy.orm import aliased
 from app.core.config import OUTPUT_DIR
 from app.database.db import transaction
@@ -26,7 +26,8 @@ def recover_stale():
 def run_once():
     with transaction() as db:
         previous = aliased(PrintJob)
-        preceding = exists(select(previous.id).where(previous.batch_id == PrintJob.batch_id,
+        preceding = exists(select(previous.id).where(or_(previous.batch_id == PrintJob.batch_id,
+            previous.session_id == PrintJob.session_id),
             previous.routing_group == PrintJob.routing_group, previous.id < PrintJob.id,
             previous.status.in_(['PENDING', 'SENDING'])))
         job = db.scalar(select(PrintJob).where(PrintJob.status == 'PENDING', ~preceding).order_by(PrintJob.id).limit(1))

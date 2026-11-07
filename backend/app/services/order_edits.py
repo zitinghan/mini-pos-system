@@ -15,7 +15,8 @@ def priced_selection_unchanged(db, before, selected):
     old_prices = {entry['option_id']: entry['price'] for entry in before['modifiers']}
     priced_groups = {entry.group_id for entry in options
         if entry.unit_price is not None or entry.price > 0 or old_prices.get(entry.id, 0) > 0}
-    priced_ids = {entry.id for entry in options if entry.group_id in priced_groups}
+    priced_ids = {entry.id for entry in options if entry.group_id in priced_groups
+        and not (entry.is_default and entry.price == 0 and entry.unit_price is None and old_prices.get(entry.id, 0) == 0)}
     return set(old_prices) & priced_ids == set(selected) & priced_ids
 
 
@@ -90,9 +91,9 @@ def edit(db, batch_id, item_id, data, key, user):
     db.add(audit)
     db.flush()
     if changed and batch.status == 'SUBMITTED':
-        job = PrintJob(batch_id=batch.id, change_id=audit.id, routing_group=before['printer_group'], ticket={
+        job = PrintJob(batch_id=batch.id, session_id=session.id, change_id=audit.id, routing_group=before['printer_group'], ticket={
             'table': orders.require(db, RestaurantTable, session.table_id).name, 'batch_id': batch.id,
-            'time': now(), 'order_type': 'UPDATE', 'notes': batch.notes,
+            'time': now(), 'order_type': 'UPDATE', 'notes': batch.notes, 'table_notes': session.notes, 'prepaid_label': batch.prepaid_label,
             'change_ref': audit.id, 'previous_items': [before], 'items': [after]})
         db.add(job)
         db.flush()

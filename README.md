@@ -10,6 +10,7 @@ Staff select a table, choose food and options, then submit an order to the kitch
 - **Ordering:** database-driven menus, required modifiers, quantities, persistent drafts, and additional order batches.
 - **Takeaway and drink options:** per-item dine-in/takeaway, prepared-drink Kosong/Siu Dai/Kao, and iced-only less/no ice; all preserve configured prices and historical snapshots. See [option rules](docs/takeaway-and-drinks.md).
 - **Order remarks and editing:** round remarks, revisioned unpaid item edits with separate correction tickets, and table occupancy only after the first successful submission. See [editing rules](docs/order-editing.md).
+- **Table controls:** cancel unpaid items or a whole table with stall cancellation notices; edit table/round remarks; add a manual paid-first label without recording a sale. 面粉粿 has regular/big portions and canned drinks have seven brand choices. See [操作说明](docs/table-controls.md).
 - **Pricing:** integer sen, server-side validation, and submitted price snapshots that preserve historical bills.
 - **Kitchen printing:** transactional print queue, mock PNG previews, ESC/POS network output, delivery tracking, and audited manual reprints.
 - **Payments:** cash with change calculation, manually confirmed QR payments, and other full-table payments.
@@ -278,7 +279,7 @@ docs/              Architecture, API, operations, and validation records
 
 Currency is MYR, with money stored in integer sen and reports using `Asia/Kuala_Lumpur`. Base menu prices must be positive; modifier surcharges can be zero. Checkout defaults to QR: after checking funds, the cashier completes payment and clears the table with one button. Each successful payment queues one customer receipt to the independent cashier printer and opens its receipt page. The MVP supports one full payment per table session.
 
-Refunds, submitted-item voids, split/partial payments, taxes, discounts, and offline order synchronization are outside this MVP. If the server becomes unavailable, submission is not assumed successful; reconnect and inspect the existing order before retrying.
+Refunds of recorded payments, split/partial payments, taxes, discounts, and offline order synchronization are outside this MVP. Unpaid submitted items/tables can be cancelled with immutable audit/print history. If the server becomes unavailable, submission is not assumed successful; reconnect and inspect the existing order before retrying.
 
 The mobile browser workflow supports LAN HTTP. Android PWA installation and service workers require trusted HTTPS. Use a trusted local HTTPS setup for installable PWA operation and keep the server on the restaurant LAN without public port forwarding.
 

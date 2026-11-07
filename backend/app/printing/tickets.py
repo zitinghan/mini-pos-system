@@ -16,16 +16,31 @@ def ticket_lines(ticket, reprint=False):
     lines.append((f"桌号 {ticket['table']}", 48))
     number = ticket.get('ticket_number', ticket.get('batch_id', 'TEST'))
     lines.append((f"票号 #{str(number).zfill(6)}", 22))
-    lines.append((f"订单 #{ticket.get('batch_id', 'TEST')}", 22))
+    lines.append((f"整桌记录 #{ticket['session_id']}" if ticket.get('scope') == 'TABLE' else f"订单 #{ticket.get('batch_id', 'TEST')}", 22))
     order_type = 'REPRINT' if reprint else ticket.get('order_type', 'NEW')
     lines.append((f"类型 {order_type}", 25))
     timestamp = datetime.fromisoformat(ticket['time']).astimezone(ZoneInfo('Asia/Kuala_Lumpur'))
     lines.append((timestamp.strftime('%d/%m %H:%M'), 20))
+    if ticket.get('order_type') == 'NOTE':
+        lines.extend([('备注 / 标记更新', 40), ('只更新提示，请勿重复制作', 30),
+            (dict(STATIONS).get(ticket.get('station'), ''), 30)])
+        if ticket.get('note_scope') == 'TABLE':
+            lines.append((f"整桌备注 {ticket.get('table_notes') or '（已清除）'}", 36))
+        else:
+            lines.append((f"本轮备注 {ticket.get('notes') or '（已清除）'}", 36))
+            lines.append(('本轮已付款（手动标记）' if ticket.get('prepaid_label') else '本轮未标记先付款', 36))
+        return lines
+    if ticket.get('prepaid_label'):
+        lines.append(('已付款（手动标记）', 36))
+    if ticket.get('table_notes'):
+        lines.append((f"整桌备注 {ticket['table_notes']}", 36))
     if ticket.get('notes'):
         lines.append((f"整单备注 {ticket['notes']}", 36))
     if ticket.get('order_type') == 'UPDATE':
         lines.extend([('更改单 / UPDATE', 40), ('请用更改后内容替换旧内容', 30)])
         lines.append((f"更改记录 #{ticket['change_ref']}", 22))
+    if ticket.get('order_type') == 'CANCEL':
+        lines.extend([('取消单 / CANCEL', 48), ('停止制作 / 不要出餐', 36), (f"原因 {ticket.get('reason', '顾客取消')}", 36)])
     total = 0
     for station, label in STATIONS:
         items = [item for item in ticket['items'] if item.get('printer_group', 'KITCHEN') == station]
@@ -54,7 +69,7 @@ def ticket_lines(ticket, reprint=False):
                 lines.append((f"  共 {item['physical_bottles']} 瓶", 36))
             if item.get('notes'):
                 lines.append((f"备注 {item['notes']}", 36))
-    lines.extend([('========================', 20), (f'共 {total} 份', 30)])
+    lines.extend([('========================', 20), (f"{'取消' if ticket.get('order_type') == 'CANCEL' else '共'} {total} 份", 30)])
     return lines
 
 
@@ -84,6 +99,8 @@ def receipt_lines(receipt, reprint=False):
     method = {'CASH': '现金 CASH', 'QR': '二维码 QR', 'OTHER': '其他 OTHER'}.get(receipt['method'], receipt['method'])
     for note in receipt.get('order_notes', []):
         lines.append((f"订单 #{note['batch_id']} 备注 {note['notes']}", 26))
+    if receipt.get('table_notes'):
+        lines.append((f"整桌备注 {receipt['table_notes']}", 26))
     lines.extend([('========================', 20), (f"合计 {money(receipt['total'])}", 36),
         (method, 26), (f"实收 {money(receipt['received'])}", 28), (f"找零 {money(receipt['change'])}", 28),
         ('谢谢光临 / THANK YOU', 22)])

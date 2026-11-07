@@ -42,7 +42,7 @@ Payment validates the current submitted total against `expected_total`. It rejec
 
 ## Assumptions and scope
 
-MYR, no tax, discounts, service charge, refunds, split bills or partial payments. QR and other payments are manually confirmed; no payment gateway or automatic verification exists. Submitted-item voids and staff PIN reset are outside this MVP; correct a mistaken submitted bill using an owner-approved operational process, not direct database edits during service. Staff use named accounts; PINs have 6–12 ASCII digits. Session tokens expire after 12 hours by default and are revoked on logout. Server and printer remain on a trusted LAN; trusted HTTPS is recommended for credentials and required for Android installable PWA behavior.
+MYR, no tax, discounts, service charge, refunds, split bills or partial payments. QR and other payments are manually confirmed; no payment gateway or automatic verification exists. Unpaid submitted items/tables can be cancelled with retained snapshots, reason/actor audits and cancellation notices; actual paid transactions remain locked. Manual paid-first labels are metadata and never create payments. Staff PIN reset is outside this MVP. Staff use named accounts; PINs have 6–12 ASCII digits. Session tokens expire after 12 hours by default and are revoked on logout. Server and printer remain on a trusted LAN; trusted HTTPS is recommended for credentials and required for Android installable PWA behavior.
 
 Implementation references: [SQLAlchemy SQLite transactions](https://docs.sqlalchemy.org/en/20/dialects/sqlite.html) and [FastAPI security](https://fastapi.tiangolo.com/tutorial/security/).
 

@@ -20,6 +20,10 @@ Success responses are typed objects or lists; HTTP errors use `{"detail":"messag
 | POST | `/order-batches` | Staff; `{"session_id":1}`; returns/reuses owned draft |
 | POST | `/order-batches/{id}/items` | Owner/admin; validated item; Idempotency-Key required |
 | PATCH | `/order-batches/{id}/items/{item_id}` | Unpaid item edit; private drafts owner/admin; revision, expected unit price and Idempotency-Key required |
+| POST | `/order-batches/{id}/items/{item_id}/cancel` | Cancel unpaid item; expected item revision, reason and Idempotency-Key |
+| PATCH | `/order-batches/{id}/details` | Edit unpaid round notes/manual paid label; expected info revision and Idempotency-Key |
+| PATCH | `/table-sessions/{id}/notes` | Edit open table remarks; expected metadata revision and Idempotency-Key |
+| POST | `/table-sessions/{id}/cancel` | Cancel unpaid table and drafts; expected bill change token, reason and Idempotency-Key |
 | DELETE | `/order-batches/{id}/items/{item_id}` | Owner/admin; cancel draft line only |
 | DELETE | `/order-batches/{id}` | Owner/admin; cancel draft |
 | POST | `/order-batches/{id}/submit` | Owner/admin; optional `{"notes":"整单备注"}` body; Idempotency-Key required; atomically save/queue |

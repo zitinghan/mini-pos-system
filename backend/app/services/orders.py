@@ -108,12 +108,13 @@ def item_data(db, item):
         'unit_price': item.unit_price, 'line_total': item.line_total, 'status': item.status,
         'sku': item.sku, 'category_code': item.category_code, 'printer_group': item.printer_group,
         'description': item.description, 'variant_name': item.variant_name, 'bottles_per_unit': item.bottles_per_unit,
-        'physical_bottles': item.physical_bottles, 'notes': item.notes, 'revision': item.revision,
+        'physical_bottles': item.physical_bottles, 'notes': item.notes, 'revision': item.revision, 'cancellation_reason': item.cancellation_reason,
         'modifiers': [{'name': m.name, 'price': m.price, 'option_id': m.option_id} for m in db.scalars(select(OrderItemModifier).where(OrderItemModifier.item_id == item.id))]}
 
 
 def batches(db, session_id):
     return [{'id': b.id, 'status': b.status, 'created_at': b.created_at, 'submitted_at': b.submitted_at, 'notes': b.notes,
+             'prepaid_label': b.prepaid_label, 'info_revision': b.info_revision,
              'user_id': b.user_id,
              'items': [item_data(db, i) for i in db.scalars(select(OrderItem).where(OrderItem.batch_id == b.id).order_by(OrderItem.id))]}
         for b in db.scalars(select(OrderBatch).where(OrderBatch.session_id == session_id).order_by(OrderBatch.id))]
@@ -122,13 +123,20 @@ def batches(db, session_id):
 def bill(db, session_id):
     session = require(db, TableSession, session_id)
     items = list(db.scalars(select(OrderItem).join(OrderBatch).where(OrderBatch.session_id == session_id, OrderBatch.status == 'SUBMITTED', OrderItem.status == 'SUBMITTED')))
+    batch_rows = list(db.scalars(select(OrderBatch).where(OrderBatch.session_id == session_id).order_by(OrderBatch.id)))
+    all_rows = list(db.scalars(select(OrderItem).join(OrderBatch).where(OrderBatch.session_id == session_id).order_by(OrderItem.id)))
+    token = hashlib.sha256(json.dumps({'status': session.status, 'notes': session.notes, 'revision': session.metadata_revision,
+        'batches': [(row.id, row.status, row.info_revision, row.notes, row.prepaid_label) for row in batch_rows],
+        'items': [(row.id, row.status, row.revision, row.quantity, row.line_total) for row in all_rows]}, sort_keys=True).encode()).hexdigest()
     return {'session_id': session.id, 'table': require(db, RestaurantTable, session.table_id).name,
+        'table_notes': session.notes, 'metadata_revision': session.metadata_revision, 'change_token': token,
+        'has_prepaid_label': any(row.prepaid_label for row in batch_rows if row.id in {item.batch_id for item in items}),
         'status': session.status, 'items': [item_data(db, i) for i in items],
         'total': sum(i.line_total for i in items), 'item_count': sum(i.quantity for i in items),
         'opened_at': session.opened_at, 'first_order_at': session.first_order_at, 'paid_at': session.paid_at,
         'closed_at': session.closed_at, 'dining_duration_seconds': dining_duration(session),
-        'order_notes': [{'batch_id': batch.id, 'notes': batch.notes} for batch in db.scalars(select(OrderBatch)
-            .where(OrderBatch.session_id == session_id, OrderBatch.status == 'SUBMITTED').order_by(OrderBatch.id)) if batch.notes],
+        'order_notes': [{'batch_id': batch.id, 'notes': batch.notes} for batch in batch_rows
+            if batch.notes and batch.id in {item.batch_id for item in items}],
         'has_drafts': db.scalar(select(OrderBatch.id).where(OrderBatch.session_id == session_id, OrderBatch.status == 'DRAFT').limit(1)) is not None}
 
 
@@ -142,7 +150,7 @@ def editable_batch(db, identity, user):
     return batch
 
 
-def submit(db, identity, key, user, notes=None):
+def submit(db, identity, key, user, notes=None, prepaid_label=None):
     batch = require(db, OrderBatch, identity)
     if batch.user_id != user['id'] and user['role'] != 'ADMIN':
         raise HTTPException(403, 'This draft belongs to another staff member')
@@ -150,12 +158,19 @@ def submit(db, identity, key, user, notes=None):
     if previous:
         if previous.id != identity:
             raise HTTPException(409, 'Idempotency key already used for another batch')
-        if notes is not None and notes.strip() != previous.notes:
+        original = db.scalar(select(AuditLog).where(AuditLog.action == 'SUBMIT_BATCH', AuditLog.request_key == key))
+        original_notes = original.details['notes'] if original else previous.notes
+        original_label = original.details['prepaid_label'] if original else previous.prepaid_label
+        if notes is not None and notes.strip() != original_notes:
             raise HTTPException(409, 'Idempotency key reused with different order notes')
+        if prepaid_label is not None and prepaid_label != original_label:
+            raise HTTPException(409, 'Idempotency key reused with different paid label')
         return submission_result(db, previous)
     editable_batch(db, identity, user)
     if notes is not None:
         batch.notes = notes.strip()
+    if prepaid_label is not None:
+        batch.prepaid_label = prepaid_label
     if active_session(db, batch.session_id).status == 'PAYMENT_PENDING':
         raise HTTPException(409, 'Checkout in progress; cashier must resume ordering first')
     items = list(db.scalars(select(OrderItem).where(OrderItem.batch_id == identity, OrderItem.status == 'DRAFT')))
@@ -181,11 +196,14 @@ def submit(db, identity, key, user, notes=None):
     session.status = 'OCCUPIED'
     ticket = {'table': require(db, RestaurantTable, session.table_id).name, 'batch_id': batch.id,
         'time': batch.submitted_at, 'order_type': order_type, 'restaurant': '可可·南洋咖啡店', 'notes': batch.notes,
+        'table_notes': session.notes, 'prepaid_label': batch.prepaid_label,
         'items': [item_data(db, i) for i in items]}
     for station, _ in STATIONS:
         station_items = [item for item in ticket['items'] if item['printer_group'] == station]
         if station_items:
-            db.add(PrintJob(batch_id=batch.id, routing_group=station, ticket={**ticket, 'items': station_items}))
+            db.add(PrintJob(batch_id=batch.id, session_id=session.id, routing_group=station, ticket={**ticket, 'items': station_items}))
+    db.add(AuditLog(user_id=user['id'], action='SUBMIT_BATCH', request_key=key,
+        details={'batch_id': batch.id, 'notes': batch.notes, 'prepaid_label': batch.prepaid_label}))
     db.flush()
     return submission_result(db, batch)
 
@@ -194,7 +212,7 @@ def submission_result(db, batch):
     jobs = list(db.scalars(select(PrintJob).where(PrintJob.batch_id == batch.id).order_by(PrintJob.id)))
     job = jobs[0]
     return {'batch_id': batch.id, 'status': batch.status, 'print_job_id': job.id, 'print_status': job.status,
-        'print_jobs': [{'id': job.id, 'routing_group': job.routing_group, 'status': job.status} for job in jobs if not job.reprint],
+        'print_jobs': [{'id': job.id, 'routing_group': job.routing_group, 'status': job.status} for job in jobs if not job.reprint and job.change_id is None],
         'total': sum(i.line_total for i in db.scalars(select(OrderItem).where(OrderItem.batch_id == batch.id, OrderItem.status == 'SUBMITTED')))}
 
 

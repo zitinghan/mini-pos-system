@@ -58,11 +58,13 @@ export default function Checkout() {
       <Link to={`/session/${id}`} className="back">← 查看订单</Link>
       <h1>{bill.data?.table} · 收款</h1>
       <ErrorBox error={bill.error || pay.error || resume.error} />
+      {bill.data?.has_prepaid_label && <p className="warning">部分订单已手动标记先付款，请核实已收款项，避免重复收款。此处仍需完成收银记录。</p>}
       {bill.data?.status === 'OCCUPIED' && <p className="notice" role="status">
         此桌已恢复点餐，请返回订单页面重新核对账单并开始结账。
       </p>}
       <section className="card stack">
         <Lines items={bill.data?.items ?? []} />
+        {bill.data?.table_notes && <p className="order-notes">整桌备注：{bill.data.table_notes}</p>}
         {bill.data?.order_notes?.map((note) => <p className="order-notes" key={note.batch_id}>订单 #{note.batch_id} 备注：{note.notes}</p>)}
         <div className="row spread"><h2>应收总额</h2><h1>{money(total)}</h1></div>
         <div className="option-grid">

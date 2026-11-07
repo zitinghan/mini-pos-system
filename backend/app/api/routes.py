@@ -9,11 +9,12 @@ from app.core.security import current_user, admin, hash_pin, verify_pin, token_h
 from app.database.db import transaction
 from app.models.entities import (User, AuthSession, LoginAttempt, RestaurantTable, TableSession, MenuItem, ModifierOption,
     OrderBatch, OrderItem, OrderItemModifier, MenuItemModifierGroup, ModifierGroup, MenuPromotion, Payment, PrintJob, PrinterConfiguration, AuditLog, now)
-from app.schemas.requests import Setup, Credentials, NewUser, NewBatch, NewItem, EditItem, SubmitBatch, PriceUpdate, Pay, PrinterSettings, OptionConfiguration, AvailabilityUpdate, PromotionUpdate
+from app.schemas.requests import Setup, Credentials, NewUser, NewBatch, NewItem, EditItem, SubmitBatch, CancelItem, CancelTable, TableNotes, BatchDetails, PriceUpdate, Pay, PrinterSettings, OptionConfiguration, AvailabilityUpdate, PromotionUpdate
 from app.services import orders
 from app.services import promotions
 from app.services import receipts
 from app.services import order_edits
+from app.services import table_controls
 from app.printing.jobs import job_data
 from app.printing.stations import STATIONS
 
@@ -221,7 +222,7 @@ def update_option(option_id: int, data: PriceUpdate, user=Depends(admin)):
             option.unit_price = data.price
         else:
             group = db.get(ModifierGroup, option.group_id)
-            if group.minimum == 0 and data.price != 0:
+            if group.minimum == 0 and group.name != '份量' and data.price != 0:
                 raise HTTPException(422, 'Complimentary customizations must remain free')
             option.price = data.price
         db.add(AuditLog(user_id=user['id'], action='MODIFIER_PRICE', details={'option_id': option_id, 'old': old, 'new': data.price}))
@@ -312,6 +313,30 @@ def edit_item(identity: int, item_id: int, data: EditItem, key: str = Depends(id
         return order_edits.edit(db, identity, item_id, data, key, user)
 
 
+@router.post('/order-batches/{identity}/items/{item_id}/cancel')
+def cancel_order_item(identity: int, item_id: int, data: CancelItem, key: str = Depends(idempotency_key), user=Depends(current_user)):
+    with transaction() as db:
+        return table_controls.cancel_item(db, identity, item_id, data, key, user)
+
+
+@router.patch('/order-batches/{identity}/details')
+def edit_batch_details(identity: int, data: BatchDetails, key: str = Depends(idempotency_key), user=Depends(current_user)):
+    with transaction() as db:
+        return table_controls.batch_details(db, identity, data, key, user)
+
+
+@router.patch('/table-sessions/{identity}/notes')
+def edit_table_notes(identity: int, data: TableNotes, key: str = Depends(idempotency_key), user=Depends(current_user)):
+    with transaction() as db:
+        return table_controls.table_notes(db, identity, data, key, user)
+
+
+@router.post('/table-sessions/{identity}/cancel')
+def cancel_table_order(identity: int, data: CancelTable, key: str = Depends(idempotency_key), user=Depends(current_user)):
+    with transaction() as db:
+        return table_controls.cancel_table(db, identity, data, key, user)
+
+
 @router.delete('/order-batches/{identity}')
 def cancel_draft(identity: int, user=Depends(current_user)):
     with transaction() as db:
@@ -325,7 +350,7 @@ def cancel_draft(identity: int, user=Depends(current_user)):
 @router.post('/order-batches/{identity}/submit')
 def submit(identity: int, data: SubmitBatch | None = None, key: str = Depends(idempotency_key), user=Depends(current_user)):
     with transaction() as db:
-        return orders.submit(db, identity, key, user, data.notes if data else None)
+        return orders.submit(db, identity, key, user, data.notes if data else None, data.prepaid_label if data else None)
 
 
 @router.get('/table-sessions/{identity}/orders')
@@ -371,11 +396,11 @@ def payment(identity: int, data: Pay, key: str = Depends(idempotency_key), user=
 def print_jobs(completed: bool | None = None, user=Depends(current_user)):
     with transaction() as db:
         finished = func.coalesce(or_(TableSession.status.in_(['PAID', 'CANCELLED']), and_(
-            PrintJob.batch_id.is_(None), PrintJob.payment_id.is_(None), PrintJob.status == 'SENT')), False)
+            PrintJob.batch_id.is_(None), PrintJob.payment_id.is_(None), PrintJob.session_id.is_(None), PrintJob.status == 'SENT')), False)
         query = (select(PrintJob, TableSession.id, TableSession.status, finished)
             .outerjoin(OrderBatch, PrintJob.batch_id == OrderBatch.id)
             .outerjoin(Payment, PrintJob.payment_id == Payment.id)
-            .outerjoin(TableSession, TableSession.id == func.coalesce(OrderBatch.session_id, Payment.session_id))
+            .outerjoin(TableSession, TableSession.id == func.coalesce(PrintJob.session_id, OrderBatch.session_id, Payment.session_id))
             .order_by(PrintJob.id.desc()))
         if completed is not None:
             query = query.where(finished == completed)
@@ -450,7 +475,7 @@ def retry(identity: int, key: str = Depends(idempotency_key), user=Depends(admin
             descendants = list(db.scalars(select(PrintJob).where(PrintJob.batch_id == source.batch_id, PrintJob.routing_group == source.routing_group))) if source.batch_id else []
         if any(j.status in ('PENDING', 'SENDING') for j in descendants):
             raise HTTPException(409, 'Another attempt for this batch is already queued')
-        job = PrintJob(batch_id=source.batch_id, payment_id=source.payment_id, change_id=source.change_id, routing_group=source.routing_group, ticket=source.ticket, reprint=True, attempts=source.attempts)
+        job = PrintJob(batch_id=source.batch_id, session_id=source.session_id, payment_id=source.payment_id, change_id=source.change_id, routing_group=source.routing_group, ticket=source.ticket, reprint=True, attempts=source.attempts)
         db.add(job)
         db.flush()
         db.add(AuditLog(user_id=user['id'], action='REPRINT', request_key=key, details={'source_job_id': identity, 'new_job_id': job.id, 'previous_status': source.status}))

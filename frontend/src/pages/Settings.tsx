@@ -22,7 +22,7 @@ function Customization({ option, peers }: { option: Option; peers: Option[] }) {
   const [conflicts, setConflicts] = useState<number[]>(option.incompatible_with ?? []);
   const save = useMutation({ mutationFn: () => api(`/menu/options/${option.id}/configuration`, 'PATCH', { enabled, incompatible_with: conflicts }), onSuccess: () => { void client.invalidateQueries({ queryKey: ['menu'] }); } });
   return <form className="customization" onSubmit={(event) => { event.preventDefault(); save.mutate(); }}>
-    <label className="check"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{option.name} · 免费</label>
+    <label className="check"><input type="checkbox" checked={enabled} onChange={(event) => setEnabled(event.target.checked)} />{option.name} · {option.price > 0 ? `+ ${money(option.price)}` : '免费'}</label>
     <small>不可同时选择：</small><div className="option-grid">{peers.filter((peer) => peer.id !== option.id).map((peer) => <button type="button" key={peer.id} aria-pressed={conflicts.includes(peer.id)} onClick={() => setConflicts((previous) => previous.includes(peer.id) ? previous.filter((id) => id !== peer.id) : [...previous, peer.id])}>{peer.name}</button>)}</div>
     <button disabled={save.isPending}>保存定制规则</button><ErrorBox error={save.error} />{save.isSuccess && <small role="status">已保存</small>}
   </form>;
@@ -81,7 +81,7 @@ export default function Settings() {
         {item.verification_required && <div className="warning"><p>{item.verification_note}</p><button disabled={verify.isPending} onClick={() => verify.mutate(item.id)}>已核实供应方式及价格</button></div>}
         {item.complimentary ? <p>白开水免费 · RM 0.00</p> : <>
           {!item.groups.some((group) => group.options.some((option) => option.unit_price != null)) && <PriceEditor id={item.id} name={item.name} price={item.regular_base_price ?? item.base_price} />}
-          {item.groups.filter((group) => group.minimum > 0).flatMap((group) => group.options.map((option) => <PriceEditor key={option.id} id={option.id} name={`${group.name} · ${option.name}${option.unit_price == null ? '（加价）' : '（单价）'}`} price={option.regular_unit_price ?? option.unit_price ?? option.price} option />))}
+          {item.groups.filter((group) => group.minimum > 0 || group.name === '份量').flatMap((group) => group.options.map((option) => <PriceEditor key={option.id} id={option.id} name={`${group.name} · ${option.name}${option.unit_price == null ? '（加价）' : '（单价）'}`} price={option.regular_unit_price ?? option.unit_price ?? option.price} option />))}
         </>}
         {item.groups.filter((group) => group.minimum === 0).map((group) => <section key={group.id}><h2>{group.name}</h2>{group.options.map((option) => <Customization key={option.id} option={option} peers={group.options} />)}</section>)}
       </details>)}

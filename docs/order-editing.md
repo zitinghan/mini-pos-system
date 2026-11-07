@@ -2,7 +2,7 @@
 
 The table list stays green/空桌 when someone only opens a table or saves a draft. The server keeps the shared draft session so multiple phones do not create competing sessions. The first successful order submission changes the displayed table state to 用餐中 and sets `first_order_at`; failed submissions do neither. Zero-price plain water still counts as an order. Payment completion releases the table as before.
 
-The draft section has an **整单备注（选填）** field, up to 500 characters, saved atomically with **确认下单 / 送档口**. Each submitted round can have a different remark. The remark appears on all nonempty stall tickets for that round, the session/bill, order cards, history and customer receipt. Item-specific notes remain separate (up to 240 characters).
+The draft section has an **整单备注（选填）** field, up to 500 characters, saved atomically with **确认下单 / 送档口**. Each submitted round can have a different remark. Submitted round remarks can be edited using **修改本轮备注 / 付款标记**, and **整桌备注（所有轮次）** applies across the table. See [current table controls](table-controls.md). Remarks appear on relevant stall tickets, session/bill, order cards, history and customer receipt. Item-specific notes remain separate (up to 240 characters).
 
 Each editable line has **修改**. Its picker opens with the original quantity/options/item note and supports the same takeaway and drink controls as new items. Saving a draft line updates the draft without printing. Before payment, submitted lines can also change quantity, options and notes. Closing the editor or tapping its backdrop discards unsaved edits. Paid history remains locked; checkout must be resumed before further changes.
 

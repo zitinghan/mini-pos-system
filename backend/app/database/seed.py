@@ -89,7 +89,7 @@ def seed():
         if db.get(PrinterConfiguration, 1) is None:
             db.add(PrinterConfiguration(id=1, config=PrinterSettings().model_dump()))
 
-        def ensure_optional_choices(item, name, position, options, incompatible_with=()):
+        def ensure_optional_choices(item, name, position, options, incompatible_with=(), prices=None):
             group = db.scalar(select(ModifierGroup).join(MenuItemModifierGroup, MenuItemModifierGroup.group_id == ModifierGroup.id)
                 .where(MenuItemModifierGroup.item_id == item.id, ModifierGroup.name == name))
             if group is None:
@@ -99,7 +99,7 @@ def seed():
                 db.add(MenuItemModifierGroup(item_id=item.id, group_id=group.id))
             for index, (option_name, default) in enumerate(options):
                 if db.scalar(select(ModifierOption.id).where(ModifierOption.group_id == group.id, ModifierOption.name == option_name)) is None:
-                    db.add(ModifierOption(group_id=group.id, name=option_name, price=0, is_default=default,
+                    db.add(ModifierOption(group_id=group.id, name=option_name, price=(prices or {}).get(option_name, 0), is_default=default,
                         display_order=index, incompatible_with=list(incompatible_with)))
             db.flush()
 
@@ -107,6 +107,11 @@ def seed():
         prepared_drinks = {sku for sku, *_ in DRINKS} - {'MINERAL_WATER', 'CANNED'}
         for item in db.scalars(select(MenuItem).order_by(MenuItem.id)):
             ensure_optional_choices(item, '用餐方式', 100, [('堂食', True), ('打包', False)])
+            if item.sku == 'MEE_HOON_KUEH':
+                ensure_optional_choices(item, '份量', 10, [('普通', True), ('大份', False)], prices={'大份': 200})
+            if item.sku == 'CANNED':
+                ensure_optional_choices(item, '品牌 / 口味', 20, [(name, False) for name in
+                    ['Sprite', 'Coke', 'Fanta', '100 PLUS', '菊花茶', '7UP', 'Passion Fruit']])
             if item.sku in prepared_drinks:
                 ensure_optional_choices(item, '甜度', 80, [('Kosong（不加糖）', False), ('Siu Dai（少甜）', False)])
                 ensure_optional_choices(item, '浓度', 90, [('Kao（加浓）', False)])

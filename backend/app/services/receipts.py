@@ -11,7 +11,7 @@ def build(db, payment):
     return {'kind': 'RECEIPT', 'restaurant': '可可·南洋咖啡店', 'english_name': 'KE KE / KOPITIAM',
         'receipt_number': f'R{payment.id:06d}', 'payment_id': payment.id, 'session_id': payment.session_id,
         'table': current['table'], 'time': payment.created_at, 'cashier': cashier.name if cashier else '',
-        'currency': 'MYR', 'items': current['items'], 'order_notes': current['order_notes'], 'total': payment.total,
+        'currency': 'MYR', 'items': current['items'], 'order_notes': current['order_notes'], 'table_notes': current['table_notes'], 'total': payment.total,
         'received': payment.received, 'change': payment.change, 'method': payment.method,
         'dining_duration_seconds': current['dining_duration_seconds']}
 
@@ -30,7 +30,7 @@ def queue_original(db, payment):
     original = db.scalar(select(PrintJob).where(PrintJob.payment_id == payment.id, PrintJob.reprint == False))
     if original:
         return original
-    job = PrintJob(payment_id=payment.id, routing_group='RECEIPT', ticket=saved(db, payment, create=True))
+    job = PrintJob(payment_id=payment.id, session_id=payment.session_id, routing_group='RECEIPT', ticket=saved(db, payment, create=True))
     db.add(job)
     db.flush()
     return job

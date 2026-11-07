@@ -33,7 +33,7 @@ export function MenuItemButton({ item, selected, onSelect }: { item: MenuItem; s
 
 export function ItemPicker({ item, onAdd, busy, initial }: PickerProps) {
   const [selected, setSelected] = useState<number[]>(
-    initial ? [...initial.modifiers.map((entry) => entry.option_id), ...item.groups.filter((group) => group.name === '用餐方式'
+    initial ? [...initial.modifiers.map((entry) => entry.option_id), ...item.groups.filter((group) => ['用餐方式', '份量'].includes(group.name)
       && !group.options.some((option) => initial.modifiers.some((entry) => entry.option_id === option.id)))
       .flatMap((group) => group.options.filter((option) => option.is_default && option.enabled !== false).map((option) => option.id))]
       : item.groups.flatMap((group) => group.options.filter((option) => option.is_default && option.enabled !== false).map((option) => option.id)),
@@ -50,7 +50,8 @@ export function ItemPicker({ item, onAdd, busy, initial }: PickerProps) {
   const variant = selectedOptions.find((option) => option.unit_price != null);
   const pricedIds = new Set(item.groups.filter((group) => group.options.some((option) => option.unit_price != null
     || option.price > 0 || initial?.modifiers.some((entry) => entry.option_id === option.id && entry.price > 0)))
-    .flatMap((group) => group.options.map((option) => option.id)));
+    .flatMap((group) => group.options.filter((option) => !(option.is_default && option.price === 0 && option.unit_price == null
+      && !initial?.modifiers.some((entry) => entry.option_id === option.id && entry.price > 0))).map((option) => option.id)));
   const oldPriced = new Set(initial?.modifiers.filter((entry) => pricedIds.has(entry.option_id)).map((entry) => entry.option_id));
   const newPriced = selected.filter((identity) => pricedIds.has(identity));
   const keepPrice = initial?.status === 'SUBMITTED' && oldPriced.size === newPriced.length && newPriced.every((identity) => oldPriced.has(identity));
@@ -128,6 +129,13 @@ export default function Session() {
   const [error, setError] = useState<unknown>(null);
   const [editing, setEditing] = useState<{ line: Line; batchId: number } | null>(null);
   const [orderNotes, setOrderNotes] = useState<string | null>(null);
+  const [draftPaid, setDraftPaid] = useState<boolean | null>(null);
+  const [tableNotes, setTableNotes] = useState<string | null>(null);
+  const [roundDetails, setRoundDetails] = useState<Batch | null>(null);
+  const [roundNotes, setRoundNotes] = useState('');
+  const [roundPaid, setRoundPaid] = useState(false);
+  const [cancelTarget, setCancelTarget] = useState<{kind:'ITEM';line:Line;batchId:number} | {kind:'TABLE';bill:Bill} | null>(null);
+  const [cancelReason, setCancelReason] = useState('顾客取消');
   const bill = useQuery({
     queryKey: ['bill', id],
     queryFn: () => api<Bill>(`/table-sessions/${id}/bill`),
@@ -152,7 +160,47 @@ export default function Session() {
   const unavailableDrafts = drafts.filter((item) => menu.data?.some((entry) => entry.id === item.menu_item_id && entry.sold_out));
   const currentChosen = chosen ? menu.data?.find((item) => item.id === chosen.id) ?? chosen : null;
   const editingMenu = editing ? menu.data?.find((item) => item.id === editing.line.menu_item_id) : null;
-  useEffect(() => { setOrderNotes(null); }, [ownDraft?.id]);
+  useEffect(() => { setOrderNotes(null); setDraftPaid(null); }, [ownDraft?.id]);
+
+  const saveTableNotes = useMutation({
+    mutationFn: async () => {
+      const payload = { notes: tableNotes ?? bill.data?.table_notes ?? '', expected_revision: bill.data?.metadata_revision };
+      const scope = `table-notes:${id}:${JSON.stringify(payload)}`;
+      const result = await api(`/table-sessions/${id}/notes`, 'PATCH', payload, requestKey(scope));
+      clearKey(scope); return result;
+    },
+    onSuccess: async () => { setTableNotes(null); await client.invalidateQueries({ queryKey: ['bill', id] }); void client.invalidateQueries({ queryKey: ['print-jobs'] }); },
+  });
+  const saveRoundDetails = useMutation({
+    mutationFn: async () => {
+      if (!roundDetails) throw new Error('请选择订单');
+      const payload = { notes: roundNotes, prepaid_label: roundPaid, expected_revision: roundDetails.info_revision ?? 1 };
+      const scope = `batch-details:${roundDetails.id}:${JSON.stringify(payload)}`;
+      const result = await api(`/order-batches/${roundDetails.id}/details`, 'PATCH', payload, requestKey(scope));
+      clearKey(scope); return result;
+    },
+    onSuccess: () => { setRoundDetails(null); refresh(); void client.invalidateQueries({ queryKey: ['print-jobs'] }); useUI.getState().setNotice('备注 / 付款标记已更新，已通知相关档口。'); },
+  });
+  const cancelOrder = useMutation({
+    mutationFn: async () => {
+      if (!cancelTarget) throw new Error('请选择要取消的内容');
+      const payload = cancelTarget.kind === 'ITEM'
+        ? { expected_revision: cancelTarget.line.revision ?? 1, reason: cancelReason.trim() }
+        : { expected_change_token: cancelTarget.bill.change_token, reason: cancelReason.trim() };
+      const path = cancelTarget.kind === 'ITEM'
+        ? `/order-batches/${cancelTarget.batchId}/items/${cancelTarget.line.id}/cancel` : `/table-sessions/${id}/cancel`;
+      const scope = `cancel:${path}:${JSON.stringify(payload)}`;
+      const result = await api<{status:string;print_jobs:{id:number}[]}>(path, 'POST', payload, requestKey(scope));
+      clearKey(scope); return { ...result, wholeTable: cancelTarget.kind === 'TABLE' };
+    },
+    onSuccess: (result) => {
+      setCancelTarget(null); refresh();
+      void client.invalidateQueries({ queryKey: ['tables'] }); void client.invalidateQueries({ queryKey: ['print-jobs'] });
+      useUI.getState().setNotice(result.wholeTable ? '整桌已取消并释放，请通知档口停止制作。' : '餐点已取消，账单已更新，取消单已送至对应档口。');
+      if (result.wholeTable) navigate('/');
+    },
+  });
+  const startCancelItem = (line: Line, batchId: number) => { cancelOrder.reset(); setCancelReason('顾客取消'); setCancelTarget({kind:'ITEM',line,batchId}); };
 
   const edit = useMutation({
     mutationFn: async ({ quantity, ids, notes = '', unitPrice }: { quantity: number; ids: number[]; notes?: string; unitPrice?: number }) => {
@@ -196,9 +244,10 @@ export default function Session() {
   const submit = useMutation({
     mutationFn: async () => {
       if (!ownDraft) throw new Error('草稿不存在');
-      const payload = { notes: orderNotes ?? ownDraft.notes ?? '' };
+      if (tableNotes !== null && tableNotes !== (bill.data?.table_notes ?? '')) await saveTableNotes.mutateAsync();
+      const payload = { notes: orderNotes ?? ownDraft.notes ?? '', prepaid_label: draftPaid ?? ownDraft.prepaid_label ?? false };
       const scope = `submit:${ownDraft.id}:${JSON.stringify(payload)}`;
-      const result = await api<{ batch_id: number; print_job_id: number; print_jobs?: {id:number;routing_group:string}[] }>(
+      const result = await api<{ batch_id: number; status?:string; print_job_id: number; print_jobs?: {id:number;routing_group:string}[] }>(
         `/order-batches/${ownDraft.id}/submit`, 'POST', payload, requestKey(scope),
       );
       clearKey(scope);
@@ -207,7 +256,7 @@ export default function Session() {
     onSuccess: (result) => {
       refresh();
       useUI.getState().setNotice(
-        `订单 #${result.batch_id} 已保存；${result.print_jobs?.length ?? 1} 张制作单已排队，请在订单页查看面档 / 饭档 / 饮料档发送状态。`,
+        result.status === 'CANCELLED' ? `订单 #${result.batch_id} 已取消，不会重新下单。` : `订单 #${result.batch_id} 已保存；${result.print_jobs?.length ?? 1} 张制作单已排队，请在订单页查看面档 / 饭档 / 饮料档发送状态。`,
       );
       navigate('/');
     },
@@ -261,6 +310,14 @@ export default function Session() {
         <strong>{money(bill.data?.total ?? 0)}</strong>
       </div>
       <ErrorBox error={error || bill.error || batches.error || menu.error || (!editing && edit.error)} />
+      <ErrorBox error={saveTableNotes.error} />
+      {bill.data?.metadata_revision != null && <section className="card stack">
+        <label>整桌备注（所有轮次）<textarea rows={2} maxLength={500} disabled={!active} value={tableNotes ?? bill.data.table_notes ?? ''}
+          onChange={(event) => setTableNotes(event.target.value)} placeholder="例如：赶时间、先上饮料" /></label>
+        <button disabled={!active || saveTableNotes.isPending || tableNotes === null || tableNotes === (bill.data.table_notes ?? '')}
+          onClick={() => saveTableNotes.mutate()}>保存整桌备注</button>
+        <small>下单后也可修改。只发送备注更新通知，不会重复制作餐点。</small>
+      </section>}
       {bill.data?.status === 'PAYMENT_PENDING' && (
         <div className="notice" role="status">
           <p>此桌正在结账。需要加单时，请收银员恢复点餐。</p>
@@ -299,9 +356,12 @@ export default function Session() {
           <strong>预计 {money(drafts.reduce((sum, item) => sum + item.line_total, 0))}</strong>
           <label>整单备注（选填）<textarea maxLength={500} rows={2} value={orderNotes ?? ownDraft.notes ?? ''}
             onChange={(event) => setOrderNotes(event.target.value)} placeholder="例如：一起上菜、先出饮料" /></label>
+          <label className="check"><input type="checkbox" checked={draftPaid ?? ownDraft.prepaid_label ?? false}
+            onChange={(event) => setDraftPaid(event.target.checked)} />本轮已付款（仅手动标记）</label>
+          <small>只作订单提示，不登记收款或自动清台；下一轮默认不标记。</small>
           <small>价格以确认下单时菜单为准。</small>
           {unavailableDrafts.length > 0 && <p className="warning" role="alert">{unavailableDrafts.map((item) => item.name).join('、')} 已售罄，请先移除或等待恢复供应。</p>}
-          <button className="primary" disabled={!active || !drafts.length || unavailableDrafts.length > 0 || submit.isPending || add.isPending || edit.isPending}
+          <button className="primary" disabled={!active || !drafts.length || unavailableDrafts.length > 0 || submit.isPending || add.isPending || edit.isPending || cancelOrder.isPending || saveTableNotes.isPending}
             onClick={() => submit.mutate()}>
             {submit.isPending ? '正在确认…' : '确认下单 / 送档口'}
           </button>
@@ -313,15 +373,22 @@ export default function Session() {
         {batches.data?.filter((batch) => batch.status !== 'DRAFT').map((batch) => (
           <div key={batch.id}>
             <p className="batch-heading">#{batch.id} · {label(batch.status)}</p>
+            {batch.prepaid_label && <strong className="pill">已付款（手动标记）</strong>}
             {batch.notes && <p className="order-notes">整单备注：{batch.notes}</p>}
-            <Lines items={batch.items} onEdit={active && batch.status === 'SUBMITTED' && !edit.isPending ? (line) => startEdit(line, batch.id) : undefined} />
+            {active && batch.status === 'SUBMITTED' && <button className="quiet" onClick={() => {
+              saveRoundDetails.reset(); setRoundDetails(batch); setRoundNotes(batch.notes ?? ''); setRoundPaid(batch.prepaid_label ?? false);
+            }}>修改本轮备注 / 付款标记</button>}
+            <Lines items={batch.items} onEdit={active && batch.status === 'SUBMITTED' && !edit.isPending && !cancelOrder.isPending ? (line) => startEdit(line, batch.id) : undefined}
+              onCancel={active && batch.status === 'SUBMITTED' && !edit.isPending && !cancelOrder.isPending ? (line) => startCancelItem(line, batch.id) : undefined} />
           </div>
         ))}
         {!bill.data?.items.length && <p className="muted">尚未确认任何菜品。</p>}
         <div className="row spread"><h2>合计</h2><h2>{money(bill.data?.total ?? 0)}</h2></div>
-        {cashier && <button className="primary" disabled={checkout.isPending || edit.isPending || !bill.data?.item_count}
+        {cashier && <button className="primary" disabled={checkout.isPending || edit.isPending || cancelOrder.isPending || saveRoundDetails.isPending || saveTableNotes.isPending || !bill.data?.item_count}
           onClick={() => checkout.mutate()}>查看账单 / 收款</button>}
-        {cashier && !bill.data?.item_count && (
+        {active && bill.data?.change_token && <button className="quiet" disabled={cancelOrder.isPending || edit.isPending || add.isPending || submit.isPending}
+          onClick={() => { cancelOrder.reset(); setCancelReason('顾客取消'); setCancelTarget({kind:'TABLE',bill:bill.data}); }}>取消整桌</button>}
+        {cashier && !bill.data?.item_count && !bill.data?.change_token && (
           <ConfirmButton disabled={closeEmpty.isPending} onConfirm={() => closeEmpty.mutate()}>
             取消草稿并释放空桌
           </ConfirmButton>
@@ -342,6 +409,28 @@ export default function Session() {
             item={editing.line.status === 'SUBMITTED' ? { ...editingMenu, sold_out: false } : editingMenu} busy={edit.isPending}
             onAdd={(quantity, ids, notes, unitPrice) => edit.mutate({ quantity, ids, notes, unitPrice })} />
             : <p className="error">菜品已停售，当前无法修改。</p>}
+        </div>
+      </div>}
+      {roundDetails && <div className="modal" role="dialog" aria-modal="true" aria-label="修改整单备注" onClick={(event) => { if (event.target === event.currentTarget) setRoundDetails(null); }}>
+        <div className="card stack"><h2>订单 #{roundDetails.id} · 备注 / 标记</h2>
+          <label>本轮备注<textarea maxLength={500} rows={3} value={roundNotes} onChange={(event) => setRoundNotes(event.target.value)} /></label>
+          <label className="check"><input type="checkbox" checked={roundPaid} onChange={(event) => setRoundPaid(event.target.checked)} />本轮已付款（仅手动标记）</label>
+          <small>不会生成收款记录，也不会重复下单。</small><ErrorBox error={saveRoundDetails.error} />
+          <button className="primary" disabled={saveRoundDetails.isPending} onClick={() => saveRoundDetails.mutate()}>保存备注 / 标记</button>
+          <button onClick={() => setRoundDetails(null)}>返回</button>
+        </div>
+      </div>}
+      {cancelTarget && <div className="modal" role="dialog" aria-modal="true" aria-label="确认取消订单" onClick={(event) => { if (event.target === event.currentTarget) setCancelTarget(null); }}>
+        <div className="card stack"><h2>{cancelTarget.kind === 'TABLE' ? `${bill.data?.table} · 取消整桌` : `取消 ${cancelTarget.line.quantity} × ${cancelTarget.line.name}`}</h2>
+          <p>{cancelTarget.kind === 'TABLE' ? '取消全部未付款餐点和草稿，并释放桌台。' : '此项会从应付账单中移除。'}已下单的餐点会通知相关档口停止制作。</p>
+          {bill.data?.has_prepaid_label && <p className="warning">此桌有先付款标记，请先处理已收款项。取消操作不会登记收款或退款。</p>}
+          <label>取消原因<select value={cancelReason} onChange={(event) => setCancelReason(event.target.value)}>
+            {['顾客取消','等候太久','点错餐','其他'].map((reason) => <option key={reason}>{reason}</option>)}
+          </select></label>
+          <ErrorBox error={cancelOrder.error} />
+          <button className="primary" disabled={cancelOrder.isPending || !cancelReason.trim()} onClick={() => cancelOrder.mutate()}>
+            {cancelTarget.kind === 'TABLE' ? '确认取消整桌' : '确认取消此项'}</button>
+          <button onClick={() => setCancelTarget(null)}>返回</button>
         </div>
       </div>}
     </>

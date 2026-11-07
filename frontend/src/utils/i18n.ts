@@ -8,6 +8,13 @@ export const zh = {tables:'桌台',orders:'订单',history:'营业记录',settin
 export const label=(key:string)=>zh[key as keyof typeof zh]??key;
 
 const errors:Record<string,string> = {
+ 'Table changed; refresh before cancelling':'桌台内容已变动，请关闭窗口后重新核对再取消。',
+ 'Remarks changed; refresh before saving':'备注或标记已被其他人修改，请关闭窗口后重新打开。',
+ 'Item already cancelled or unavailable':'此项已经取消或当前无法操作，请刷新查看。',
+ 'Paid orders cannot be cancelled or changed':'已有收银付款记录，不能取消或修改。',
+ 'Order already cancelled':'此订单已取消。',
+ 'Cancellation reason is required':'请选择取消原因。',
+ 'Idempotency key reused with different table action':'本次操作内容与上次不同，请刷新后重试。',
  'Item changed; refresh before editing':'餐点已被其他人修改，请关闭后重新打开再编辑。',
  'Item price changed; refresh before editing':'价格已变动，请关闭后重新打开再核对。',
  'Item is unavailable; only reduce quantity or edit notes':'此餐点已停售或售罄，只能减少数量或修改备注。',

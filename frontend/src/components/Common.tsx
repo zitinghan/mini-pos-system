@@ -5,14 +5,16 @@ import {label} from '../utils/i18n';
 import {visibleModifiers} from '../utils/modifiers';
 export function ErrorBox({error}:{error:unknown}){return error?<div role="alert" className="error">{error instanceof Error?error.message:String(error)}</div>:null;}
 export function Loading(){return <p role="status" className="muted">正在加载…</p>;}
-export function Lines({ items, onEdit }: { items: Line[]; onEdit?: (item: Line) => void }) {
+export function Lines({ items, onEdit, onCancel }: { items: Line[]; onEdit?: (item: Line) => void; onCancel?: (item: Line) => void }) {
   return <div>{items.map((item) => <div className={`line ${item.status === 'CANCELLED' ? 'cancelled' : ''}`} key={item.id}>
     <div><strong>{item.quantity} × {item.name}</strong>{item.description && <small>{item.description}</small>}
       {visibleModifiers(item.modifiers).length > 0 && <small>{visibleModifiers(item.modifiers).map((modifier) => modifier.name).join(' · ')}</small>}
       {!!item.physical_bottles && <small>共 {item.physical_bottles} 瓶</small>}
       {item.notes && <small>备注：{item.notes}</small>}
+      {item.cancellation_reason && <small>取消原因：{item.cancellation_reason}</small>}
       <small>{money(item.unit_price)} / 份 · {label(item.status)}</small>
       {onEdit && item.status !== 'CANCELLED' && <button className="quiet" aria-label={`修改 ${item.quantity} × ${item.name}`} onClick={() => onEdit(item)}>修改</button>}
+      {onCancel && item.status !== 'CANCELLED' && <button className="quiet" aria-label={`取消 ${item.quantity} × ${item.name}`} onClick={() => onCancel(item)}>取消此项</button>}
     </div><strong>{money(item.line_total)}</strong>
   </div>)}</div>;
 }

@@ -45,6 +45,8 @@ class TableSession(Record, Base):
     opened_at: Mapped[str] = mapped_column(default=now)
     first_order_at: Mapped[str | None]
     paid_at: Mapped[str | None]
+    notes: Mapped[str] = mapped_column(default='')
+    metadata_revision: Mapped[int] = mapped_column(default=1)
     __table_args__ = (Index('uq_active_table', 'table_id', unique=True, sqlite_where=text("status IN ('OCCUPIED','PAYMENT_PENDING')")), CheckConstraint("status IN ('OCCUPIED','PAYMENT_PENDING','PAID','CANCELLED')"))
 
 class MenuCategory(Record, Base):
@@ -117,6 +119,8 @@ class OrderBatch(Record, Base):
     submission_key: Mapped[str | None] = mapped_column(unique=True)
     submitted_at: Mapped[str | None]
     notes: Mapped[str] = mapped_column(default='')
+    prepaid_label: Mapped[bool] = mapped_column(default=False)
+    info_revision: Mapped[int] = mapped_column(default=1)
     __table_args__ = (
         Index('uq_user_draft', 'session_id', 'user_id', unique=True, sqlite_where=text("status = 'DRAFT'")),
         CheckConstraint("status IN ('DRAFT','SUBMITTED','CANCELLED')"),
@@ -141,6 +145,7 @@ class OrderItem(Record, Base):
     physical_bottles: Mapped[int] = mapped_column(default=0)
     notes: Mapped[str] = mapped_column(default='')
     revision: Mapped[int] = mapped_column(default=1)
+    cancellation_reason: Mapped[str] = mapped_column(default='')
     __table_args__ = (CheckConstraint('quantity > 0 AND line_total >= 0'),)
 
 class OrderItemModifier(Record, Base):
@@ -181,6 +186,7 @@ class PrintJob(Record, Base):
     batch_id: Mapped[int | None] = mapped_column(ForeignKey('order_batches.id'), index=True)
     payment_id: Mapped[int | None] = mapped_column(ForeignKey('payments.id'), index=True)
     change_id: Mapped[int | None] = mapped_column(ForeignKey('audit_logs.id'), index=True)
+    session_id: Mapped[int | None] = mapped_column(ForeignKey('table_sessions.id'), index=True)
     printer_mode: Mapped[str | None]
     status: Mapped[str] = mapped_column(default='PENDING', index=True)
     attempts: Mapped[int] = mapped_column(default=0)

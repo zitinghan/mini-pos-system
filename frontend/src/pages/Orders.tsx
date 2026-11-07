@@ -54,14 +54,20 @@ export default function Orders() {
         <span className="pill">{job.completed ? '已完成' : '未完成'}{job.session_status ? ` · ${label(job.session_status)}` : ' · 测试单'}</span>
       </div>
       <div className="row spread">
-        <strong>{job.payment_id ? `收据 R${String(job.payment_id).padStart(6, '0')}` : job.batch_id ? `订单 #${job.batch_id}` : '测试单'} / 任务 #{job.id}</strong>
+        <strong>{job.payment_id ? `收据 R${String(job.payment_id).padStart(6, '0')}` : job.batch_id ? `订单 #${job.batch_id}` : job.session_id ? '整桌通知' : '测试单'} / 任务 #{job.id}</strong>
         <span className={`print-status ${job.status}`}>{label(job.status)}</span>
       </div>
       <small>{localTime(job.created_at)} · {label(job.routing_group ?? 'COMBINED')} · 尝试 {job.attempts} 次 {job.reprint ? '· 重印' : ''}</small>
       {job.order_type === 'UPDATE' && <strong className="warning">更改单 · 请用新内容替换旧内容</strong>}
+      {job.order_type === 'CANCEL' && <strong className="warning">取消单 · 停止制作 / 不要出餐</strong>}
+      {job.order_type === 'NOTE' && <strong className="notice">备注 / 标记更新 · 不新增餐点</strong>}
+      {job.prepaid_label && <strong className="pill">已付款（手动标记）</strong>}
+      {job.reason && <p>取消原因：{job.reason}</p>}
+      {job.table_notes && <p className="order-notes">整桌备注：{job.table_notes}</p>}
       {job.notes && <p className="order-notes">整单备注：{job.notes}</p>}
       {job.error && <p className="error">{translateError(job.error)}</p>}
       <div className="row">
+        {job.session_id && ['OCCUPIED','PAYMENT_PENDING'].includes(job.session_status ?? '') && <Link className="back" to={`/session/${job.session_id}`}>打开此桌</Link>}
         {job.preview && <button onClick={() => { setReceiptImage(job.document_type === 'RECEIPT'); previewJob(job.id).then(setImage).catch(setError); }}>
           {job.document_type === 'RECEIPT' ? '查看收据' : '查看厨房单'}
         </button>}
