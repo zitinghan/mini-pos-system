@@ -47,6 +47,36 @@ The React frontend is served by Nginx, which forwards API requests to FastAPI. S
 
 Database constraints enforce one active session per table and one payment per session. Submission saves the order and print job atomically. Printing occurs outside the database transaction. Idempotency keys protect draft additions, submissions, payments, and manual reprint requests.
 
+## Run on Windows
+
+Python 3.12 and Node.js are required for initial installation. From PowerShell in the repository root:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r backend\requirements-dev.txt
+cd frontend
+npm ci
+npm test
+npm run build
+cd ..
+.\Start-POS.cmd
+```
+
+The launcher applies migrations, seeds the menu and 15 tables, then starts the API, built frontend, and print worker in the background. Open `http://127.0.0.1:8080`. It uses the installed Microsoft YaHei font for CJK ticket rendering and binds to this PC only. Docker is not required.
+
+On first launch, Notepad opens `backend/data/FIRST-RUN.txt` with a generated setup token. Enter your preferred administrator name, a new 6-12 digit PIN, and this token in the app. No administrator PIN is predefined. The private token configuration, database, and ticket previews stay in the ignored `backend/data/` directory. Keep these files private and preserve them when updating the app.
+
+Double-click `Start-POS.cmd` to reopen the app, and `Stop-POS.cmd` to stop its background processes. Windows desktop shortcuts may point to these commands. Closing the browser leaves the app running; after restarting Windows, launch it again. Startup does not require internet after installation. Logs are in `artifacts/windows/`.
+
+To run backend checks on Windows:
+
+```powershell
+$env:PYTHONUTF8 = '1'
+$env:FONT_PATH = "$env:WINDIR\Fonts\msyh.ttc"
+cd backend
+..\.venv\Scripts\python.exe -m pytest
+```
+
 ## Quick start with Docker
 
 Run the following from the repository root on the intended host. A development PC and the restaurant deployment server can use separate installations and data volumes.
