@@ -91,7 +91,11 @@ def test_frozen_amount_survives_edits_addons_and_item_cancellation(client, heade
     assert cancelled.status_code == 200, cancelled.text
     current = bill(client, headers, session)
     assert current['prepaid_total'] == 800 and current['overpaid_amount'] == 500
-    assert pay(client, headers, session).status_code == 422
+    result = pay(client, headers, session)
+    assert result.status_code == 200, result.text
+    assert result.json()['change'] == 500
+    assert result.json()['settlement']['additional_collected'] == 0
+    assert result.json()['settlement']['allocations'] == {'QR': 300}
     with transaction() as db:
         assert db.get(OrderBatch, batch).prepaid_amount == 800
         assert db.scalar(select(PrintJob).order_by(PrintJob.id)).ticket == original
@@ -109,7 +113,6 @@ def test_adjustable_amount_offer_and_stale_payment_protection(client, headers):
     stale = {'expected_total': 800, 'expected_prepaid_total': 500, 'expected_prepaid_token': old['prepaid_token'], 'method': 'QR', 'received': 300}
     assert client.post(f'/api/table-sessions/{session}/payments', headers=key(headers), json=stale).status_code == 409
     assert client.post(f'/api/table-sessions/{session}/payments', headers=key(headers), json={'expected_total': 800, 'method': 'QR', 'received': 800}).status_code == 409
-    assert pay(client, headers, session, final_total=500).status_code == 422
     result = pay(client, headers, session, final_total=600, offer_reason='优惠')
     assert result.status_code == 200, result.text
     assert result.json()['total'] == 600 and result.json()['settlement']['allocations'] == {'CASH': 600}
@@ -185,3 +188,29 @@ def test_explicit_null_paid_amount_defaults_to_full_and_submit_retry_is_safe(cli
     assert client.post(endpoint, headers=request, json=body).json() == original.json()
     assert client.post(endpoint, headers=request, json={**body,'prepaid_amount':500}).status_code == 409
     assert bill(client, headers, session)['prepaid_total'] == 800
+
+
+@pytest.mark.parametrize('final_total', [800, 700, 0])
+def test_overpaid_checkout_closes_once_preserves_credit_and_records_change(client, headers, final_total):
+    session, batch, _ = placed(client, headers, 900)
+    current = bill(client, headers, session)
+    request = key(headers)
+    body = {'expected_total': 800, 'expected_prepaid_total': 900,
+        'expected_prepaid_token': current['prepaid_token'], 'final_total': final_total}
+    endpoint = f'/api/table-sessions/{session}/payments'
+    response = client.post(endpoint, headers=request, json=body)
+    assert response.status_code == 200, response.text
+    payment = response.json()
+    assert payment['received'] == 900 and payment['change'] == 900-final_total
+    assert payment['settlement']['additional_collected'] == 0
+    assert payment['settlement']['overpaid_amount'] == 900-final_total
+    assert sum(payment['settlement']['allocations'].values()) == final_total
+    assert client.post(endpoint, headers=request, json=body).json() == payment
+    assert client.get('/api/tables/5', headers=headers).json()['status'] == 'AVAILABLE'
+    report = client.get('/api/reports/daily-sales', headers=headers).json()
+    assert report['total'] == sum(report['methods'].values()) == final_total
+    receipt = client.get(f"/api/payments/{payment['id']}/receipt", headers=headers).json()
+    assert receipt['change'] == 900-final_total
+    with transaction() as db:
+        assert db.get(OrderBatch, batch).prepaid_amount == 900
+        assert db.scalar(select(func.count()).select_from(Payment)) == 1

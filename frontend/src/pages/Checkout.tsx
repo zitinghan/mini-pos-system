@@ -69,7 +69,7 @@ export default function Checkout() {
   const [displayUnavailable, setDisplayUnavailable] = useState(false);
   useEffect(() => {
     if (!id || !bill.data || bill.isError || bill.data.status !== 'PAYMENT_PENDING'
-      || !validOffer || overpaid || pay.isPending || pay.isSuccess) return;
+      || !validOffer || pay.isPending || pay.isSuccess) return;
     let cancelled = false;
     const timer = window.setTimeout(() => {
       void api<{ status: string }>(`/table-sessions/${id}/customer-display`, 'POST', {
@@ -83,7 +83,7 @@ export default function Checkout() {
 
   if (bill.isPending) return <><Loading /><ErrorBox error={bill.error} /></>;
   const blocked = bill.isError || pay.isPending || !bill.data?.item_count || bill.data?.status !== 'PAYMENT_PENDING'
-    || (bill.data?.has_drafts && !discard) || !validOffer || overpaid
+    || (bill.data?.has_drafts && !discard) || !validOffer
     || (!fullyPaid && method === 'CASH' && ((remaining > 0 && sen === null) || (sen !== null && sen < remaining)));
 
   return (
@@ -117,7 +117,7 @@ export default function Checkout() {
         <div className="row spread"><h2>应收总额</h2><h1>{validOffer ? money(finalTotal!) : '请检查金额'}</h1></div>
         <div className="row spread"><strong>已付金额</strong><strong>{money(prepaid)}</strong></div>
         <div className="row spread"><strong>剩余应收</strong><strong>{validOffer ? money(remaining) : '请检查金额'}</strong></div>
-        {overpaid && <p className="error" role="alert">已付超过应付，请先处理退款并更正已付金额。</p>}
+        {overpaid && <p className="warning" role="alert">已付超过应付 {money(prepaid-finalTotal!)}。仍可确认清台，无需再收款；超付金额将记为应找零，请核实并处理。</p>}
         {fullyPaid && !overpaid && <p className="notice">已付全款，无需再次收款或选择付款方式。</p>}
         {!fullyPaid && <><div className="option-grid">
           {[['CASH', '现金'], ['QR', '二维码'], ['OTHER', '其他']].map(([value, name]) => (

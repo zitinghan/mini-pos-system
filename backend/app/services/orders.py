@@ -305,9 +305,7 @@ def pay(db, session_id, data, key, user):
     if ((data.expected_prepaid_total is not None and data.expected_prepaid_total != prepaid)
             or (data.expected_prepaid_token is not None and data.expected_prepaid_token != current['prepaid_token'])):
         raise HTTPException(409, '已付金额或方式已改变，请刷新后重新核对。')
-    if prepaid > total:
-        raise HTTPException(422, '已付超过应付，请先处理退款并更正已付金额。')
-    remaining = total-prepaid
+    remaining = max(0, total-prepaid)
     if remaining and data.method is None:
         raise HTTPException(422, '请选择剩余款项的付款方式。')
     if not remaining and prepaid and data.received:
@@ -324,9 +322,18 @@ def pay(db, session_id, data, key, user):
     additional_received = data.received if remaining and data.method == 'CASH' else remaining
     received = prepaid+additional_received
     allocations = prepayments.allocate(current['prepaid_rounds'],data.method,remaining)
+    # Attribute only net sales to payment methods; preserve gross prepaid amounts
+    # separately and return the excess as change due.
+    excess = max(0, prepaid-total)
+    for allocation_method in reversed(list(allocations)):
+        returned = min(excess, allocations[allocation_method])
+        allocations[allocation_method] -= returned
+        excess -= returned
+    allocations = {name: amount for name, amount in allocations.items() if amount}
     method = next(iter(allocations)) if len(allocations)==1 else 'OTHER' if allocations else data.method or 'OTHER'
     settlement = {'prepaid_total':prepaid,'additional_collected':remaining,'allocations':allocations,
-        'prepaid_rounds':current['prepaid_rounds'],'additional_method':data.method if remaining else None}
+        'prepaid_rounds':current['prepaid_rounds'],'additional_method':data.method if remaining else None,
+        'overpaid_amount':max(0, prepaid-total)}
     payment = Payment(session_id=session_id, user_id=user['id'], idempotency_key=key, request_hash=fingerprint,
         method=method, original_total=current['total'], total=total, offer_reason=data.offer_reason.strip() if total != current['total'] else '',
         received=received, change=received-total, settlement=settlement)

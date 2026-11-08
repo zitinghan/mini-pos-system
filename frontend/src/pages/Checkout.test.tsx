@@ -34,12 +34,14 @@ describe('single-step QR checkout', () => {
     expect(screen.getByText('剩余应收').parentElement).toHaveTextContent('RM 3.00');
     expect(screen.getByRole('button', {name:'二维码'})).toBeVisible();
   });
-  it('prevents settlement when a discount would leave excess money already paid', () => {
+  it('warns about excess prepaid money but allows settlement without collecting again', () => {
     state.prepaid = 2000;
     render(<View />);
     fireEvent.change(screen.getByLabelText('优惠后总价 (RM)'), {target:{value:'19.00'}});
     expect(screen.getByRole('alert')).toHaveTextContent('已付超过应付');
-    expect(screen.getByRole('button', {name:'确认已付款并清台'})).toBeDisabled();
+    expect(screen.getByRole('alert')).toHaveTextContent('RM 1.00');
+    fireEvent.click(screen.getByRole('button', {name:'确认已付款并清台'}));
+    expect(state.mutate).toHaveBeenCalledOnce();
   });
   it('defaults to QR without a checkbox or extra confirmation dialog', () => {
     render(<View />);
