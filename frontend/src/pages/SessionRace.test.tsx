@@ -9,6 +9,25 @@ const apiMock = vi.hoisted(() => vi.fn());
 vi.mock('../services/api', () => ({ api: apiMock, requestKey: () => 'test-request-identity', clearKey: vi.fn() }));
 afterEach(() => { useAuth.getState().signOut(); apiMock.mockReset(); });
 
+it('lets staff open checkout for a submitted table', async () => {
+  const bill = { session_id: 1, table: 'T01', status: 'OCCUPIED', items: [], total: 800, item_count: 1, has_drafts: false };
+  apiMock.mockImplementation((path: string) => Promise.resolve(path.endsWith('/checkout')
+    ? { ...bill, status: 'PAYMENT_PENDING' } : path.endsWith('/bill') ? bill : []));
+  useAuth.getState().signIn('staff-token', { id: 2, name: 'staff', role: 'STAFF' });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/session/1']}><Routes>
+    <Route path="/session/:id" element={<Session />} />
+    <Route path="/checkout/:id" element={<p>Staff checkout opened</p>} />
+  </Routes></MemoryRouter></QueryClientProvider>);
+  try {
+    const button = await screen.findByRole('button', { name: '查看账单 / 收款' });
+    expect(button).toBeEnabled();
+    fireEvent.click(button);
+    expect(await screen.findByText('Staff checkout opened')).toBeVisible();
+    expect(apiMock).toHaveBeenCalledWith('/table-sessions/1/checkout', 'POST');
+  } finally { view.unmount(); client.clear(); }
+});
+
 it('keeps the next selected dish open when the previous add finishes saving', async () => {
   let finishAdd!: (value: unknown) => void;
   const addPromise = new Promise((resolve) => { finishAdd = resolve; });

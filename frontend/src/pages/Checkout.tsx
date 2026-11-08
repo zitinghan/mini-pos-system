@@ -93,7 +93,7 @@ export default function Checkout() {
       <ErrorBox error={bill.error || pay.error || resume.error} />
       {restoredOffer&&<p className="notice">此桌由误收款恢复，原收款已撤销。请重新核对金额及优惠后收款。</p>}
       {displayUnavailable && <p className="warning">顾客显示屏暂时无法连接，仍可正常收款。</p>}
-      {bill.data?.prepaid_rounds?.map((round)=><p className="muted" key={round.batch_id}>订单 #{round.batch_id} · 已付款 {money(round.amount)} · {round.method?label(round.method):'方式未记录'}
+      {bill.data?.prepaid_rounds?.map((round)=><p className="muted" key={round.batch_id}>订单 #{round.order_number ?? round.batch_id} · 已付款 {money(round.amount)} · {round.method?label(round.method):'方式未记录'}
         {round.amount_estimated && <span className="warning">（旧标记按该轮餐点估算，请返回订单核实并保存已付金额）</span>}</p>)}
       {bill.data?.status === 'OCCUPIED' && <p className="notice" role="status">
         此桌已恢复点餐，请返回订单页面重新核对账单并开始结账。
@@ -101,7 +101,7 @@ export default function Checkout() {
       <section className="card stack">
         <Lines items={bill.data?.items ?? []} />
         {bill.data?.table_notes && <p className="order-notes">整桌备注：{bill.data.table_notes}</p>}
-        {bill.data?.order_notes?.map((note) => <p className="order-notes" key={note.batch_id}>订单 #{note.batch_id} 备注：{note.notes}</p>)}
+        {bill.data?.order_notes?.map((note) => <p className="order-notes" key={note.batch_id}>订单 #{note.order_number ?? note.batch_id} 备注：{note.notes}</p>)}
         <div className="row spread"><span>餐点原价</span><strong>{money(total)}</strong></div>
         <label>优惠后总价 (RM)<input inputMode="decimal" value={finalText} disabled={pay.isPending}
           onChange={(event) => setOffer({ original: total, value: event.target.value })} /></label>

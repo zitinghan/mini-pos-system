@@ -41,9 +41,9 @@ def ticket_lines(ticket, reprint=False):
         lines.append(('REPRINT / 重印', 25))
     lines.append((ticket.get('restaurant', '可可·南洋咖啡店'), 32))
     lines.append((f"桌号 {ticket['table']}", 48))
-    number = ticket.get('ticket_number', ticket.get('batch_id', 'TEST'))
+    number = ticket.get('order_number', ticket.get('ticket_number', ticket.get('batch_id', 'TEST')))
     lines.append((f"票号 #{str(number).zfill(6)}", 22))
-    lines.append((f"整桌记录 #{ticket['session_id']}" if ticket.get('scope') == 'TABLE' else f"订单 #{ticket.get('batch_id', 'TEST')}", 22))
+    lines.append((f"整桌记录 #{ticket['session_id']}" if ticket.get('scope') == 'TABLE' else f"订单 #{ticket.get('order_number', ticket.get('batch_id', 'TEST'))}", 22))
     order_type = 'REPRINT' if reprint else ticket.get('order_type', 'NEW')
     lines.append((f"类型 {order_type}", 25))
     timestamp = datetime.fromisoformat(ticket['time']).astimezone(ZoneInfo('Asia/Kuala_Lumpur'))
@@ -134,7 +134,7 @@ def receipt_lines(receipt, reprint=False):
         lines.append((f"{item['quantity']} x {money(item['unit_price'])} = {money(item['line_total'])}", 24))
     method = {'CASH': '现金 CASH', 'QR': '二维码 QR', 'OTHER': '其他 OTHER'}.get(receipt['method'], receipt['method'])
     for note in receipt.get('order_notes', []):
-        lines.append((f"订单 #{note['batch_id']} 备注 {note['notes']}", 26))
+        lines.append((f"订单 #{note.get('order_number', note['batch_id'])} 备注 {note['notes']}", 26))
     if receipt.get('table_notes'):
         lines.append((f"整桌备注 {receipt['table_notes']}", 26))
     if receipt.get('original_total', receipt['total']) != receipt['total']:

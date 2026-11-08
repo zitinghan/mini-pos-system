@@ -5,6 +5,13 @@ The operational interface defaults to Simplified Chinese. This guide uses Englis
 ## Open a table and order
 
 1. Sign in with your staff name and PIN.
+
+Staff can use **查看账单 / 收款** to collect cash, QR, or other payments and release
+the table. The customer amount display works for staff checkout too. After payment,
+staff can view and print their own receipt, including a confirmed reprint.
+Other employees' receipts, financial reports, system settings, and account
+management remain restricted to administrators. Payment records retain the name
+of the employee who collected the payment.
 2. On 桌台, choose T01–T20. Green 空桌 means available; orange 用餐中 means occupied; blue 待结账 means checkout is in progress. Text accompanies every color.
 3. Choose a category and dish, such as 云吞面, 面粉粿 or 海南咖喱饭. The screen scrolls to its options. Default options are already selected. Choose sauce/preparation/portion, change quantity using −/+, then tap 加入草稿.
 4. Review 当前草稿. It is saved but has **not** reached the kitchen. Use 修改 to change a line's quantity/options/item note. Fill 整单备注（选填） for instructions applying to the whole round; this remark saves with order submission. Remove unwanted lines or confirm 丢弃此草稿 if necessary.

@@ -301,7 +301,7 @@ export default function Session() {
       const payload = { notes: orderNotes ?? ownDraft.notes ?? '', prepaid_label: paid, prepaid_method: paid ? draftMethod ?? ownDraft.prepaid_method ?? 'QR' : null,
         ...(paid && draftAmount !== null ? {prepaid_amount:amount} : {}) };
       const scope = `submit:${ownDraft.id}:${JSON.stringify(payload)}`;
-      const result = await api<{ batch_id: number; status?:string; print_job_id: number; print_jobs?: {id:number;routing_group:string}[] }>(
+      const result = await api<{ batch_id: number; order_number?:number; status?:string; print_job_id: number; print_jobs?: {id:number;routing_group:string}[] }>(
         `/order-batches/${ownDraft.id}/submit`, 'POST', payload, requestKey(scope),
       );
       clearKey(scope);
@@ -310,7 +310,7 @@ export default function Session() {
     onSuccess: (result) => {
       refresh();
       useUI.getState().setNotice(
-        result.status === 'CANCELLED' ? `订单 #${result.batch_id} 已取消，不会重新下单。` : `订单 #${result.batch_id} 已保存；${result.print_jobs?.length ?? 1} 张制作单已排队，请在订单页查看面档 / 饭档 / 饮料档发送状态。`,
+        result.status === 'CANCELLED' ? `订单 #${result.order_number ?? result.batch_id} 已取消，不会重新下单。` : `订单 #${result.order_number ?? result.batch_id} 已保存；${result.print_jobs?.length ?? 1} 张制作单已排队，请在订单页查看面档 / 饭档 / 饮料档发送状态。`,
       );
       navigate('/');
     },
@@ -361,6 +361,7 @@ export default function Session() {
   }
   const active = bill.data?.status === 'OCCUPIED';
   const cashier = user?.role === 'ADMIN' && ['OCCUPIED', 'PAYMENT_PENDING'].includes(bill.data?.status ?? '');
+  const canPay = !!user && ['OCCUPIED', 'PAYMENT_PENDING'].includes(bill.data?.status ?? '');
 
   return (
     <>
@@ -373,7 +374,7 @@ export default function Session() {
       {bill.data?.status === 'PAYMENT_PENDING' && (
         <div className="notice" role="status">
           <p>此桌正在结账。需要加单时，请收银员恢复点餐。</p>
-          {cashier && <button disabled={resume.isPending} onClick={() => resume.mutate()}>
+          {canPay && <button disabled={resume.isPending} onClick={() => resume.mutate()}>
             继续加单
           </button>}
         </div>
@@ -431,7 +432,7 @@ export default function Session() {
         <h2>已下单 · 桌台账单</h2>
         {batches.data?.filter((batch) => batch.status !== 'DRAFT').map((batch) => (
           <div key={batch.id}>
-            <p className="batch-heading">#{batch.id} · {label(batch.status)}</p>
+            <p className="batch-heading">#{batch.order_number ?? batch.id} · {label(batch.status)}</p>
             {batch.prepaid_label && <strong className="pill"><span>已付款（手动标记）</span>{batch.prepaid_method&&<span> · {label(batch.prepaid_method)}</span>}
               {batch.prepaid_amount!=null&&<span> · {money(batch.prepaid_amount)}</span>}</strong>}
             {batch.notes && <p className="order-notes">整单备注：{batch.notes}</p>}
@@ -446,7 +447,7 @@ export default function Session() {
         ))}
         {!bill.data?.items.length && <p className="muted">尚未确认任何菜品。</p>}
         <div className="row spread"><h2>合计</h2><h2>{money(bill.data?.total ?? 0)}</h2></div>
-        {cashier && <button className="primary" disabled={checkout.isPending || edit.isPending || saveCustom.isPending || addCustom.isPending || cancelOrder.isPending || saveRoundDetails.isPending || saveTableNotes.isPending || !bill.data?.item_count}
+        {canPay && <button className="primary" disabled={checkout.isPending || edit.isPending || saveCustom.isPending || addCustom.isPending || cancelOrder.isPending || saveRoundDetails.isPending || saveTableNotes.isPending || !bill.data?.item_count}
           onClick={() => checkout.mutate()}>查看账单 / 收款</button>}
         {active && bill.data?.change_token && <button className="quiet" disabled={cancelOrder.isPending || edit.isPending || saveCustom.isPending || addCustom.isPending || add.isPending || submit.isPending}
           onClick={() => { cancelOrder.reset(); setCancelReason('顾客取消'); setCancelTarget({kind:'TABLE',bill:bill.data}); }}>取消整桌</button>}
@@ -458,7 +459,7 @@ export default function Session() {
       </section>
       {batches.data?.filter((batch) => batch.status === 'DRAFT' && batch.user_id !== user?.id).map((batch) => (
         <section className="card" key={batch.id}>
-          <h2>其他员工草稿 #{batch.id}</h2>
+          <h2>其他员工草稿 #{batch.order_number ?? batch.id}</h2>
           <Lines items={batch.items.filter((item) => item.status === 'DRAFT')} />
         </section>
       ))}
@@ -484,7 +485,7 @@ export default function Session() {
         </div>
       </div>}
       {roundDetails && <div className="modal" role="dialog" aria-modal="true" aria-label="修改整单备注" onClick={(event) => { if (event.target === event.currentTarget) setRoundDetails(null); }}>
-        <div className="card stack"><h2>订单 #{roundDetails.id} · 备注 / 标记</h2>
+        <div className="card stack"><h2>订单 #{roundDetails.order_number ?? roundDetails.id} · 备注 / 标记</h2>
           <label>本轮备注<textarea maxLength={500} rows={3} value={roundNotes} onChange={(event) => setRoundNotes(event.target.value)} /></label>
           <label className="check"><input type="checkbox" checked={roundPaid} onChange={(event) => {
             setRoundPaid(event.target.checked); if(event.target.checked&&roundMethod===null)setRoundMethod('QR');

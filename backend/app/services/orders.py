@@ -5,6 +5,7 @@ from sqlalchemy import select
 from app.services.pricing import SelectionGroup, PriceValidationError, calculate_price
 from app.services import promotions
 from app.services import prepayments
+from app.services import order_numbers
 from app.database.seed import CUSTOM_ITEM_SKU
 from app.printing.stations import STATIONS
 from app.models.entities import (MenuItem, MenuCategory, ModifierGroup, ModifierOption, MenuItemModifierGroup,
@@ -126,7 +127,7 @@ def item_data(db, item):
 
 
 def batches(db, session_id):
-    return [{'id': b.id, 'status': b.status, 'created_at': b.created_at, 'submitted_at': b.submitted_at, 'notes': b.notes,
+    return [{'id': b.id, 'order_number': b.order_number, 'business_day': b.business_day, 'status': b.status, 'created_at': b.created_at, 'submitted_at': b.submitted_at, 'notes': b.notes,
              'prepaid_label': b.prepaid_label, 'prepaid_method': b.prepaid_method, 'prepaid_amount': b.prepaid_amount, 'info_revision': b.info_revision,
              'user_id': b.user_id,
              'items': [item_data(db, i) for i in db.scalars(select(OrderItem).where(OrderItem.batch_id == b.id).order_by(OrderItem.id))]}
@@ -140,6 +141,9 @@ def bill(db, session_id):
     all_rows = list(db.scalars(select(OrderItem).join(OrderBatch).where(OrderBatch.session_id == session_id).order_by(OrderItem.id)))
     draft_ids = {row.id for row in batch_rows if row.status == 'DRAFT'}
     credits = prepayments.summary(batch_rows, all_rows)
+    for row in credits['rounds']:
+        batch = next(b for b in batch_rows if b.id == row['batch_id'])
+        row['order_number'] = batch.order_number or batch.id
     labelled = bool(credits['rounds'])
     recovery = db.scalar(select(PaymentReversal).where(PaymentReversal.restored_session_id == session_id))
     prior_payment = db.get(Payment, recovery.payment_id) if recovery else None
@@ -162,7 +166,7 @@ def bill(db, session_id):
         'total': sum(i.line_total for i in items), 'item_count': sum(i.quantity for i in items),
         'opened_at': session.opened_at, 'first_order_at': session.first_order_at, 'paid_at': session.paid_at,
         'closed_at': session.closed_at, 'dining_duration_seconds': dining_duration(session),
-        'order_notes': [{'batch_id': batch.id, 'notes': batch.notes} for batch in batch_rows
+        'order_notes': [{'batch_id': batch.id, 'order_number': batch.order_number or batch.id, 'notes': batch.notes} for batch in batch_rows
             if batch.notes and batch.id in {item.batch_id for item in items}],
         'has_drafts': bool(draft_ids)}
 
@@ -235,6 +239,7 @@ def submit(db, identity, key, user, notes=None, prepaid_label=None, prepaid_meth
     else:
         batch.prepaid_amount = None
     batch.status, batch.submission_key, batch.submitted_at = 'SUBMITTED', key, now()
+    order_numbers.assign(db, batch)
     db.flush()
     session = require(db, TableSession, batch.session_id)
     order_type = 'ADD-ON' if session.first_order_at else 'NEW'
@@ -242,6 +247,7 @@ def submit(db, identity, key, user, notes=None, prepaid_label=None, prepaid_meth
         session.first_order_at = batch.submitted_at
     session.status = 'OCCUPIED'
     ticket = {'table': require(db, RestaurantTable, session.table_id).name, 'batch_id': batch.id,
+        'order_number': batch.order_number, 'business_day': batch.business_day,
         'time': batch.submitted_at, 'order_type': order_type, 'restaurant': '可可·南洋咖啡店', 'notes': batch.notes,
         'table_notes': session.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method, 'prepaid_amount': batch.prepaid_amount,
         'items': [item_data(db, i) for i in items]}
@@ -259,7 +265,7 @@ def submit(db, identity, key, user, notes=None, prepaid_label=None, prepaid_meth
 def submission_result(db, batch):
     jobs = list(db.scalars(select(PrintJob).where(PrintJob.batch_id == batch.id).order_by(PrintJob.id)))
     job = jobs[0]
-    return {'batch_id': batch.id, 'status': batch.status, 'print_job_id': job.id, 'print_status': job.status,
+    return {'batch_id': batch.id, 'order_number': batch.order_number, 'business_day': batch.business_day, 'status': batch.status, 'print_job_id': job.id, 'print_status': job.status,
         'print_jobs': [{'id': job.id, 'routing_group': job.routing_group, 'status': job.status} for job in jobs if not job.reprint and job.change_id is None],
         'total': sum(i.line_total for i in db.scalars(select(OrderItem).where(OrderItem.batch_id == batch.id, OrderItem.status == 'SUBMITTED')))}
 

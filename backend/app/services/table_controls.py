@@ -56,6 +56,7 @@ def print_notices(db, session, record, items, order_type, batch=None, reason='',
             'table_notes': session.notes, 'notes': batch.notes if batch else '',
             'reason': reason, 'note_scope': note_scope, 'items': relevant if order_type in ('CANCEL', 'RESTORE') else []}
         if batch:
+            ticket.update(order_number=batch.order_number or batch.id, business_day=batch.business_day)
             ticket.update(batch_id=batch.id, prepaid_label=batch.prepaid_label, prepaid_method=batch.prepaid_method, prepaid_amount=batch.prepaid_amount)
         job = PrintJob(batch_id=batch.id if batch else None, session_id=session.id,
             change_id=record.id, routing_group=station, ticket=ticket)

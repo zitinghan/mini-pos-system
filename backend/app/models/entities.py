@@ -114,6 +114,8 @@ class MenuItemModifierGroup(Base):
 
 class OrderBatch(Record, Base):
     __tablename__ = 'order_batches'
+    order_number: Mapped[int | None]
+    business_day: Mapped[str | None]
     session_id: Mapped[int] = mapped_column(ForeignKey('table_sessions.id'), index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
     status: Mapped[str] = mapped_column(default='DRAFT')
@@ -126,6 +128,7 @@ class OrderBatch(Record, Base):
     info_revision: Mapped[int] = mapped_column(default=1)
     __table_args__ = (
         Index('uq_user_draft', 'session_id', 'user_id', unique=True, sqlite_where=text("status = 'DRAFT'")),
+          Index('uq_order_number_per_day', 'business_day', 'order_number', unique=True),
         CheckConstraint("status IN ('DRAFT','SUBMITTED','CANCELLED')"),
     )
 

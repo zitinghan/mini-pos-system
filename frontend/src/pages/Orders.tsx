@@ -54,7 +54,7 @@ export default function Orders() {
         <span className="pill">{job.completed ? '已完成' : '未完成'}{job.session_status ? ` · ${label(job.session_status)}` : ' · 测试单'}</span>
       </div>
       <div className="row spread">
-        <strong>{job.payment_id ? `收据 R${String(job.payment_id).padStart(6, '0')}` : job.batch_id ? `订单 #${job.batch_id}` : job.session_id ? '整桌通知' : '测试单'} / 任务 #{job.id}</strong>
+        <strong>{job.payment_id ? `收据 R${String(job.payment_id).padStart(6, '0')}` : job.batch_id ? `订单 #${job.order_number ?? job.batch_id}` : job.session_id ? '整桌通知' : '测试单'} / 任务 #{job.id}</strong>
         <span className={`print-status ${job.status}`}>{label(job.status)}</span>
       </div>
       <small>{localTime(job.created_at)} · {label(job.routing_group ?? 'COMBINED')} · 尝试 {job.attempts} 次 {job.reprint ? '· 重印' : ''}</small>

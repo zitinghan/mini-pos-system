@@ -14,7 +14,7 @@ def test_migrate_seed_and_restart_without_data_loss(tmp_path):
         assert db.execute('SELECT COUNT(*) FROM restaurant_tables').fetchone()[0] == 20
         assert db.execute('SELECT COUNT(*) FROM menu_items').fetchone()[0] == 35
         assert db.execute('SELECT COUNT(*) FROM menu_items WHERE active=1').fetchone()[0] == 34
-        assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0] == '0013_canned_fixed_price'
+        assert db.execute('SELECT version_num FROM alembic_version').fetchone()[0] == '0014_daily_order_numbers'
         assert db.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
 
 
@@ -39,6 +39,7 @@ def test_v1_upgrade_preserves_paid_history_and_adopts_legacy_names(tmp_path):
         result = subprocess.run([sys.executable, '-m', 'app.database.initialize'], env=env, capture_output=True, text=True)
         assert result.returncode == 0, result.stderr
     with sqlite3.connect(path) as db:
+        assert db.execute('SELECT order_number,business_day FROM order_batches WHERE id=1').fetchone() == (1, '2026-11-06')
         assert [row[:len(original_payment[0])] for row in db.execute('SELECT * FROM payments')] == original_payment
         assert [row[:11] for row in db.execute('SELECT * FROM order_items')] == original_item
         assert db.execute("SELECT id, name FROM menu_items WHERE sku = 'MEE_HOON_KUEH'").fetchone() == (1, '面粉粿')

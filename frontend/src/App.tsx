@@ -74,10 +74,10 @@ export default function App() {
           <Route path="/" element={<Tables />} />
           <Route path="/session/:id" element={<Session />} />
           <Route path="/orders" element={<Orders />} />
-          <Route path="/checkout/:id" element={admin ? <Checkout /> : <Navigate to="/" replace />} />
+          <Route path="/checkout/:id" element={<Checkout />} />
           <Route path="/history" element={admin ? <History /> : <Navigate to="/" replace />} />
           <Route path="/settings" element={admin ? <Settings /> : <Navigate to="/" replace />} />
-          <Route path="/receipts/:paymentId" element={admin ? <Receipt /> : <Navigate to="/" replace />} />
+          <Route path="/receipts/:paymentId" element={<Receipt />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

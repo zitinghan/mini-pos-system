@@ -100,6 +100,7 @@ def record_change(db, batch, session, before, after, changed, fingerprint, key, 
     if changed and batch.status == 'SUBMITTED':
         job = PrintJob(batch_id=batch.id, session_id=session.id, change_id=audit.id, routing_group=before['printer_group'], ticket={
             'table': orders.require(db, RestaurantTable, session.table_id).name, 'batch_id': batch.id,
+            'order_number': batch.order_number or batch.id, 'business_day': batch.business_day,
             'time': now(), 'order_type': 'UPDATE', 'notes': batch.notes, 'table_notes': session.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method, 'prepaid_amount': batch.prepaid_amount,
             'change_ref': audit.id, 'previous_items': [before], 'items': [after]})
         db.add(job)

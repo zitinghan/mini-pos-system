@@ -406,7 +406,7 @@ def session_bill(identity: int, user=Depends(current_user)):
 
 
 @router.post('/table-sessions/{identity}/checkout')
-def checkout(identity: int, user=Depends(admin)):
+def checkout(identity: int, user=Depends(current_user)):
     with customer_display.lock:
         with transaction() as db:
             session = orders.active_session(db, identity)
@@ -417,14 +417,14 @@ def checkout(identity: int, user=Depends(admin)):
 
 
 @router.post('/table-sessions/{identity}/resume')
-def resume(identity: int, user=Depends(admin)):
+def resume(identity: int, user=Depends(current_user)):
     with transaction() as db:
         orders.active_session(db, identity).status = 'OCCUPIED'
         return {'ok': True}
 
 
 @router.post('/table-sessions/{identity}/payments')
-def payment(identity: int, data: Pay, key: str = Depends(idempotency_key), user=Depends(admin)):
+def payment(identity: int, data: Pay, key: str = Depends(idempotency_key), user=Depends(current_user)):
     # Serialize with checkout previews so a late preview cannot overwrite change.
     with customer_display.lock:
         with transaction() as db:
@@ -437,7 +437,7 @@ def payment(identity: int, data: Pay, key: str = Depends(idempotency_key), user=
 
 
 @router.post('/table-sessions/{identity}/customer-display')
-def checkout_display(identity: int, data: CustomerDisplayAmount, user=Depends(admin)):
+def checkout_display(identity: int, data: CustomerDisplayAmount, user=Depends(current_user)):
     with customer_display.lock:
         with transaction() as db:
             session = orders.active_session(db, identity)
@@ -472,18 +472,25 @@ def print_jobs(completed: bool | None = None, user=Depends(current_user)):
                  'completed': bool(is_completed)} for job, session_id, session_status, is_completed in db.execute(query)]
 
 
+def accessible_payment(db, payment_id, user):
+    payment = orders.require(db, Payment, payment_id)
+    if user['role'] != 'ADMIN' and payment.user_id != user['id']:
+        raise HTTPException(403, 'Only the collecting staff member or an administrator can access this receipt')
+    return payment
+
+
 @router.get('/payments/{payment_id}/receipt')
-def payment_receipt(payment_id: int, user=Depends(admin)):
+def payment_receipt(payment_id: int, user=Depends(current_user)):
     with transaction() as db:
-        return receipts.document(db, orders.require(db, Payment, payment_id))
+        return receipts.document(db, accessible_payment(db, payment_id, user))
 
 
 @router.post('/payments/{payment_id}/receipt/print', status_code=201)
-def print_receipt(payment_id: int, key: str = Depends(idempotency_key), user=Depends(admin)):
+def print_receipt(payment_id: int, key: str = Depends(idempotency_key), user=Depends(current_user)):
     with transaction() as db:
+        payment = accessible_payment(db, payment_id, user)
         if db.scalar(select(PaymentReversal.id).where(PaymentReversal.payment_id == payment_id)):
             raise HTTPException(409, '此收款已撤销，原收据仅供查看。')
-        payment = orders.require(db, Payment, payment_id)
         existing = db.scalar(select(AuditLog).where(AuditLog.request_key == key))
         if existing:
             if existing.action != 'RECEIPT_PRINT' or existing.details['payment_id'] != payment_id:
@@ -498,8 +505,8 @@ def print_receipt(payment_id: int, key: str = Depends(idempotency_key), user=Dep
 def print_job(identity: int, user=Depends(current_user)):
     with transaction() as db:
         job = orders.require(db, PrintJob, identity)
-        if job.payment_id is not None and user['role'] != 'ADMIN':
-            raise HTTPException(403, 'Cashier/admin permission required')
+        if job.payment_id is not None:
+            accessible_payment(db, job.payment_id, user)
         return job_data(job)
 
 
@@ -507,8 +514,8 @@ def print_job(identity: int, user=Depends(current_user)):
 def preview(identity: int, user=Depends(current_user)):
     with transaction() as db:
         job = orders.require(db, PrintJob, identity)
-        if job.payment_id is not None and user['role'] != 'ADMIN':
-            raise HTTPException(403, 'Cashier/admin permission required')
+        if job.payment_id is not None:
+            accessible_payment(db, job.payment_id, user)
         if not job.preview:
             raise HTTPException(404, 'Preview not generated yet')
         path = config.OUTPUT_DIR / job.preview
@@ -518,9 +525,13 @@ def preview(identity: int, user=Depends(current_user)):
 
 
 @router.post('/print-jobs/{identity}/retry', status_code=201)
-def retry(identity: int, key: str = Depends(idempotency_key), user=Depends(admin)):
+def retry(identity: int, key: str = Depends(idempotency_key), user=Depends(current_user)):
     with transaction() as db:
         source = orders.require(db, PrintJob, identity)
+        if source.payment_id is not None:
+            accessible_payment(db, source.payment_id, user)
+        elif user['role'] != 'ADMIN':
+            raise HTTPException(403, 'Administrator permission required for preparation ticket reprints')
         if source.payment_id and db.scalar(select(PaymentReversal.id).where(PaymentReversal.payment_id == source.payment_id)):
             raise HTTPException(409, '此收款已撤销，不能重印原收据。')
         previous = db.scalar(select(AuditLog).where(AuditLog.request_key == key))
