@@ -71,15 +71,18 @@ def ticket_lines(ticket, reprint=False):
     if ticket.get('order_type') == 'RESTORE':
         lines.extend([('恢复单 / RESTORE', 48), ('取消作废，核对后继续准备', 36), ('已制作请勿重复出餐', 36)])
     total = 0
-    for station, label in STATIONS:
-        items = [item for item in ticket['items'] if item.get('printer_group', 'KITCHEN') == station]
+    combined = ticket.get('combined_replacement', False)
+    for station, label in ([('CHANGE', '餐点更换 / REPLACEMENT')] if combined else STATIONS):
+        items = [item for item in ticket['items'] if combined or item.get('printer_group', 'KITCHEN') == station]
         if not items:
             continue
         lines.append((f'----- {label} -----', 30))
-        previous = [item for item in ticket.get('previous_items', []) if item.get('printer_group', 'KITCHEN') == station]
+        previous = [item for item in ticket.get('previous_items', []) if combined or item.get('printer_group', 'KITCHEN') == station]
         if previous:
             lines.append(('原内容（作废）', 36))
             for item in previous:
+                if combined:
+                    lines.append((dict(STATIONS).get(item.get('printer_group'), ''), 30))
                 old_start = len(lines)
                 lines.append((f"{item['quantity']} x {item['name']}", 48))
                 if is_takeaway(item): lines.append(('【打包】', 64))
@@ -92,6 +95,8 @@ def ticket_lines(ticket, reprint=False):
             lines.append(('改为以下内容', 36))
         for item in items:
             lines.append(('------------------------', 20))
+            if combined:
+                lines.append((dict(STATIONS).get(item.get('printer_group'), ''), 30))
             item_start = len(lines)
             lines.append((f"{item['quantity']} x {item['name']}", 48))
             if is_takeaway(item): lines.append(('【打包】', 64))

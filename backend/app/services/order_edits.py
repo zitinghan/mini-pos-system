@@ -44,15 +44,14 @@ def edit(db, batch_id, item_id, data, key, user):
         orders.editable_batch(db, batch_id, user)
     if item.revision != data.expected_revision:
         raise HTTPException(409, 'Item changed; refresh before editing')
-    if data.menu_item_id != item.menu_item_id:
-        raise HTTPException(422, 'Edit this item options or quantity; add another dish separately')
+    replacing = data.menu_item_id != item.menu_item_id
     if len(data.option_ids) != len(set(data.option_ids)):
         raise HTTPException(422, 'Duplicate modifier selection')
     before = orders.item_data(db, item)
     old_ids = {entry['option_id'] for entry in before['modifiers']}
-    same_choices = old_ids == set(data.option_ids)
-    frozen_price = batch.status == 'SUBMITTED' and priced_selection_unchanged(db, before, data.option_ids)
-    source = orders.require(db, MenuItem, item.menu_item_id)
+    same_choices = not replacing and old_ids == set(data.option_ids)
+    frozen_price = not replacing and batch.status == 'SUBMITTED' and priced_selection_unchanged(db, before, data.option_ids)
+    source = orders.require(db, MenuItem, data.menu_item_id)
     if batch.status == 'SUBMITTED' and same_choices:
         if data.quantity > item.quantity and (source.sold_out or not source.active):
             raise HTTPException(409, 'Item is unavailable; only reduce quantity or edit notes')
@@ -60,7 +59,7 @@ def edit(db, batch_id, item_id, data, key, user):
         modifiers = before['modifiers']
         options = None
     else:
-        source, options, quoted = orders.price_item(db, item.menu_item_id, data.quantity, data.option_ids,
+        source, options, quoted = orders.price_item(db, data.menu_item_id, data.quantity, data.option_ids,
             allow_unavailable=frozen_price and data.quantity <= item.quantity)
         unit = item.unit_price if frozen_price else quoted
         old_prices = {entry['option_id']: entry['price'] for entry in before['modifiers']}
@@ -69,11 +68,12 @@ def edit(db, batch_id, item_id, data, key, user):
     if unit != data.expected_unit_price:
         raise HTTPException(409, 'Item price changed; refresh before editing')
     notes = data.notes.strip()
-    changed = not same_choices or data.quantity != item.quantity or notes != item.notes or unit != item.unit_price
+    changed = replacing or not same_choices or data.quantity != item.quantity or notes != item.notes or unit != item.unit_price
     if changed:
         item.quantity, item.notes = data.quantity, notes
         item.unit_price, item.line_total = unit, unit * data.quantity
-        if batch.status == 'DRAFT':
+        if batch.status == 'DRAFT' or replacing:
+            item.menu_item_id = source.id
             item.name, item.base_price = source.name, source.base_price
             orders.snapshot_item(db, item, source, options)
         elif not frozen_price and options is not None:
@@ -98,13 +98,17 @@ def record_change(db, batch, session, before, after, changed, fingerprint, key, 
     db.add(audit)
     db.flush()
     if changed and batch.status == 'SUBMITTED':
-        job = PrintJob(batch_id=batch.id, session_id=session.id, change_id=audit.id, routing_group=before['printer_group'], ticket={
-            'table': orders.require(db, RestaurantTable, session.table_id).name, 'batch_id': batch.id,
-            'order_number': batch.order_number or batch.id, 'business_day': batch.business_day,
-            'time': now(), 'order_type': 'UPDATE', 'notes': batch.notes, 'table_notes': session.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method, 'prepaid_amount': batch.prepaid_amount,
-            'change_ref': audit.id, 'previous_items': [before], 'items': [after]})
-        db.add(job)
-        db.flush()
-        after = {**after, 'change_print_job_id': job.id}
+        jobs = []
+        for routing_group in dict.fromkeys([before['printer_group'], after['printer_group']]):
+            job = PrintJob(batch_id=batch.id, session_id=session.id, change_id=audit.id, routing_group=routing_group, ticket={
+                'table': orders.require(db, RestaurantTable, session.table_id).name, 'batch_id': batch.id,
+                'order_number': batch.order_number or batch.id, 'business_day': batch.business_day,
+                'time': now(), 'order_type': 'UPDATE', 'notes': batch.notes, 'table_notes': session.notes, 'prepaid_label': batch.prepaid_label, 'prepaid_method': batch.prepaid_method, 'prepaid_amount': batch.prepaid_amount,
+                'combined_replacement': before['menu_item_id'] != after['menu_item_id'],
+                'change_ref': audit.id, 'previous_items': [before], 'items': [after]})
+            db.add(job)
+            db.flush()
+            jobs.append(job.id)
+        after = {**after, 'change_print_job_id': jobs[0], 'change_print_job_ids': jobs}
         audit.details = {**audit.details, 'result': after}
     return after

@@ -68,7 +68,7 @@ def test_order_notes_print_on_all_relevant_stalls_and_customer_receipt(client, h
     paid = client.post(f'/api/table-sessions/{session}/payments', headers=key(headers),
         json={'method': 'QR', 'received': bill['total'], 'expected_total': bill['total']}).json()
     receipt = client.get(f"/api/payments/{paid['id']}/receipt", headers=headers).json()
-    assert receipt['order_notes'] == [{'batch_id': batch, 'notes': '一起上菜'}]
+    assert receipt['order_notes'] == [{'batch_id': batch, 'order_number': result.json()['order_number'], 'notes': '一起上菜'}]
     assert '一起上菜' in '\n'.join(text for text, _ in ticket_lines(receipt))
 
 
@@ -229,3 +229,48 @@ def test_multiline_order_remarks_and_correction_notes_render_without_clipping(tm
     flat_item = {**item, 'notes': item['notes'].replace('\n', ' ')}
     flat = render({**ticket, 'notes': ticket['notes'].replace('\n', ' '), 'items': [flat_item], 'previous_items': [flat_item]}, False, 576, tmp_path / 'flat.png')
     assert multiline.width == 576 and multiline.height > flat.height
+
+
+@pytest.mark.parametrize('submitted', [False, True])
+@pytest.mark.parametrize('replacement_sku', ['CURRY_RICE', 'MEE_HOON_KUEH'])
+def test_replace_dish_updates_bill_and_prints_old_and_new_together(client, headers, submitted, replacement_sku):
+    food, session, batch, line = setup_item(client, headers, submitted=submitted)
+    replacement = catalog(client, headers)[replacement_sku]
+    endpoint = f"/api/order-batches/{batch}/items/{line['id']}"
+    payload = edit_payload(replacement, line, quantity=2, price=replacement['base_price'])
+    request = key(headers)
+    response = client.patch(endpoint, headers=request, json=payload)
+    assert response.status_code == 200, response.text
+    updated = response.json()
+    assert updated['menu_item_id'] == replacement['id']
+    assert updated['sku'] == replacement_sku and updated['name'] == replacement['name']
+    assert updated['line_total'] == replacement['base_price'] * 2
+    assert updated['revision'] == 2
+    assert client.patch(endpoint, headers=request, json=payload).json() == updated
+    with transaction() as db:
+        jobs = list(db.scalars(select(PrintJob).where(PrintJob.change_id.is_not(None))))
+        if not submitted:
+            assert not jobs
+            return
+        assert {job.routing_group for job in jobs} == {line['printer_group'], updated['printer_group']}
+        assert len(jobs) == len({line['printer_group'], updated['printer_group']})
+        for job in jobs:
+            lines = ticket_lines(job.ticket)
+            old = next(text for text, _ in lines if text == f"1 x {food['name']}")
+            new = next(text for text, _ in lines if text == f"2 x {replacement['name']}")
+            assert old.strike and not getattr(new, 'strike', False)
+            assert job.ticket['previous_items'][0]['menu_item_id'] == food['id']
+    assert client.get(f'/api/table-sessions/{session}/bill', headers=headers).json()['total'] == updated['line_total']
+
+
+def test_replacement_rejects_sold_out_dish_without_changing_original(client, headers):
+    _, _, batch, line = setup_item(client, headers)
+    replacement = catalog(client, headers)['CURRY_RICE']
+    with transaction() as db:
+        db.get(MenuItem, replacement['id']).sold_out = True
+    response = client.patch(f"/api/order-batches/{batch}/items/{line['id']}", headers=key(headers),
+        json=edit_payload(replacement, line, price=replacement['base_price']))
+    assert response.status_code == 409
+    with transaction() as db:
+        assert db.get(OrderItem, line['id']).menu_item_id == line['menu_item_id']
+        assert db.scalar(select(func.count()).select_from(PrintJob)) == 1

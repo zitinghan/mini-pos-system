@@ -46,3 +46,17 @@ it.each([['DRAFT',300],['SUBMITTED',330]])('drops retired canned temperatures fr
   fireEvent.click(screen.getByRole('button',{name:`保存修改 · RM ${(Number(price)/100).toFixed(2)}`}));
   expect(save).toHaveBeenCalledWith(1,[10,3],'原备注',Number(price));
 });
+
+
+it('uses replacement defaults and current price while retaining quantity and notes', () => {
+  const save = vi.fn();
+  const rice: MenuItem = { id: 9, name: 'Rice', base_price: 1500, groups: [
+    { id: 9, name: 'Size', minimum: 1, maximum: 1, options: [
+      { id: 91, name: 'Regular rice', price: 0, is_default: true },
+    ] },
+  ] };
+  render(<ItemPicker item={rice} initial={line} onAdd={save} busy={false} />);
+  expect(screen.getByRole('button', { name: 'Regular rice' })).toHaveAttribute('aria-pressed', 'true');
+  fireEvent.click(screen.getByRole('button', { name: '保存修改 · RM 45.00' }));
+  expect(save).toHaveBeenCalledWith(3, [91], line.notes, 1500);
+});

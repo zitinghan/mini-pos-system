@@ -9,6 +9,34 @@ const apiMock = vi.hoisted(() => vi.fn());
 vi.mock('../services/api', () => ({ api: apiMock, requestKey: () => 'test-request-identity', clearKey: vi.fn() }));
 afterEach(() => { useAuth.getState().signOut(); apiMock.mockReset(); });
 
+it('replaces a submitted dish directly through the editor', async () => {
+  const line = { id: 10, menu_item_id: 1, name: 'Noodles', quantity: 2, base_price: 800,
+    unit_price: 800, line_total: 1600, status: 'SUBMITTED', revision: 3, notes: 'Less salt', modifiers: [] };
+  const menu = [
+    { id: 1, name: 'Noodles', base_price: 800, groups: [] },
+    { id: 2, name: 'Rice', base_price: 1000, groups: [] },
+  ];
+  apiMock.mockImplementation((path: string, method: string) => {
+    if (method === 'PATCH') return Promise.resolve({ ...line, menu_item_id: 2, change_print_job_id: 99 });
+    return Promise.resolve(path.endsWith('/bill')
+      ? { session_id: 1, table: 'T01', status: 'OCCUPIED', items: [line], total: 1600, item_count: 2 }
+      : path.endsWith('/orders') ? [{ id: 1, status: 'SUBMITTED', user_id: 1, items: [line] }] : menu);
+  });
+  useAuth.getState().signIn('token', { id: 1, name: 'owner', role: 'ADMIN' });
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const view = render(<QueryClientProvider client={client}><MemoryRouter initialEntries={['/session/1']}>
+    <Routes><Route path="/session/:id" element={<Session />} /></Routes></MemoryRouter></QueryClientProvider>);
+  try {
+    fireEvent.click(await screen.findByRole('button', { name: '修改 2 × Noodles' }));
+    fireEvent.change(screen.getByLabelText('更换餐点'), { target: { value: '2' } });
+    fireEvent.click(screen.getByRole('button', { name: '保存修改 · RM 20.00' }));
+    await waitFor(() => expect(apiMock).toHaveBeenCalledWith('/order-batches/1/items/10', 'PATCH', {
+      menu_item_id: 2, quantity: 2, option_ids: [], notes: 'Less salt', expected_revision: 3, expected_unit_price: 1000,
+    }, 'test-request-identity'));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: '修改餐点' })).not.toBeInTheDocument());
+  } finally { view.unmount(); client.clear(); }
+});
+
 it('lets staff open checkout for a submitted table', async () => {
   const bill = { session_id: 1, table: 'T01', status: 'OCCUPIED', items: [], total: 800, item_count: 1, has_drafts: false };
   apiMock.mockImplementation((path: string) => Promise.resolve(path.endsWith('/checkout')

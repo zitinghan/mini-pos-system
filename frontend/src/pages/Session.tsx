@@ -40,8 +40,9 @@ export function MenuItemButton({ item, selected, onSelect }: { item: MenuItem; s
 }
 
 export function ItemPicker({ item, onAdd, busy, initial }: PickerProps) {
+  const sameItem = initial?.menu_item_id === item.id;
   const [selected, setSelected] = useState<number[]>(
-    initial ? [...initial.modifiers.filter(entry => item.groups.some(group => group.options.some(option => option.id === entry.option_id))).map((entry) => entry.option_id), ...item.groups.filter((group) => ['用餐方式', '份量'].includes(group.name)
+    initial && sameItem ? [...initial.modifiers.filter(entry => item.groups.some(group => group.options.some(option => option.id === entry.option_id))).map((entry) => entry.option_id), ...item.groups.filter((group) => ['用餐方式', '份量'].includes(group.name)
       && !group.options.some((option) => initial.modifiers.some((entry) => entry.option_id === option.id)))
       .flatMap((group) => group.options.filter((option) => option.is_default && option.enabled !== false).map((option) => option.id))]
       : item.groups.flatMap((group) => group.options.filter((option) => option.is_default && option.enabled !== false).map((option) => option.id)),
@@ -66,7 +67,7 @@ export function ItemPicker({ item, onAdd, busy, initial }: PickerProps) {
       && !initial?.modifiers.some((entry) => entry.option_id === option.id && entry.price > 0))).map((option) => option.id)));
   const oldPriced = new Set(initial?.modifiers.filter((entry) => pricedIds.has(entry.option_id)).map((entry) => entry.option_id));
   const newPriced = selected.filter((identity) => pricedIds.has(identity));
-  const keepPrice = initial?.status === 'SUBMITTED' && oldPriced.size === newPriced.length && newPriced.every((identity) => oldPriced.has(identity));
+  const keepPrice = sameItem && initial?.status === 'SUBMITTED' && oldPriced.size === newPriced.length && newPriced.every((identity) => oldPriced.has(identity));
   const price = keepPrice ? initial.unit_price : (variant?.unit_price ?? item.base_price) + selectedOptions.reduce((sum, option) => sum + option.price, 0);
   const valid = item.groups.every((group) => {
     const count = group.options.filter((option) => selected.includes(option.id)).length;
@@ -147,6 +148,7 @@ export default function Session() {
   const [category, setCategory] = useState<CategoryCode>('MAINS');
   const [error, setError] = useState<unknown>(null);
   const [editing, setEditing] = useState<{ line: Line; batchId: number } | null>(null);
+  const [replacementId, setReplacementId] = useState<number | null>(null);
   const [orderNotes, setOrderNotes] = useState<string | null>(null);
   const [draftPaid, setDraftPaid] = useState<boolean | null>(null);
   const [draftMethod, setDraftMethod] = useState<PaymentMethod | null>(null);
@@ -182,7 +184,7 @@ export default function Session() {
   const drafts = ownDraft?.items.filter((item) => item.status === 'DRAFT') ?? [];
   const unavailableDrafts = drafts.filter((item) => menu.data?.some((entry) => entry.id === item.menu_item_id && entry.sold_out));
   const currentChosen = chosen ? menu.data?.find((item) => item.id === chosen.id) ?? chosen : null;
-  const editingMenu = editing ? menu.data?.find((item) => item.id === editing.line.menu_item_id) : null;
+  const editingMenu = editing ? menu.data?.find((item) => item.id === (replacementId ?? editing.line.menu_item_id)) : null;
   useEffect(() => { setOrderNotes(null); setDraftPaid(null); setDraftMethod(null); setDraftAmount(null); }, [ownDraft?.id]);
 
   const saveTableNotes = useMutation({
@@ -231,7 +233,7 @@ export default function Session() {
   const edit = useMutation({
     mutationFn: async ({ quantity, ids, notes = '', unitPrice }: { quantity: number; ids: number[]; notes?: string; unitPrice?: number }) => {
       if (!editing) throw new Error('请选择要修改的餐点');
-      const payload = { menu_item_id: editing.line.menu_item_id, quantity, option_ids: [...ids].sort((a, b) => a - b),
+      const payload = { menu_item_id: editingMenu?.id ?? editing.line.menu_item_id, quantity, option_ids: [...ids].sort((a, b) => a - b),
         notes, expected_revision: editing.line.revision ?? 1, expected_unit_price: unitPrice };
       const scope = `edit:${editing.batchId}:${editing.line.id}:${JSON.stringify(payload)}`;
       const result = await api<Line & {change_print_job_id?:number}>(`/order-batches/${editing.batchId}/items/${editing.line.id}`, 'PATCH', payload, requestKey(scope));
@@ -258,7 +260,7 @@ export default function Session() {
       useUI.getState().setNotice(result.change_print_job_id ? '自定义餐点已修改，更改单已送至对应档口。' : '自定义草稿已修改。');
     },
   });
-  const startEdit = (line: Line, batchId: number) => { edit.reset(); saveCustom.reset(); setEditing({ line, batchId }); };
+  const startEdit = (line: Line, batchId: number) => { edit.reset(); saveCustom.reset(); setReplacementId(null); setEditing({ line, batchId }); };
 
   const addCustom = useMutation({
     mutationFn: async (value: CustomItemInput) => {
@@ -476,10 +478,15 @@ export default function Session() {
         <div className="stack"><button onClick={() => setEditing(null)}>关闭编辑</button>
           <ErrorBox error={editing.line.is_custom ? saveCustom.error : edit.error} />
           {editing.line.status === 'SUBMITTED' && <p className="notice">保存后会出更改单，请通知对应档口按新内容准备。</p>}
+          {!editing.line.is_custom && <label>更换餐点<select value={replacementId ?? editing.line.menu_item_id} disabled={edit.isPending}
+            onChange={(event) => { edit.reset(); setReplacementId(Number(event.target.value)); }}>
+            {!menu.data?.some(item => item.id === editing.line.menu_item_id) && <option value={editing.line.menu_item_id}>{editing.line.name}</option>}
+            {menu.data?.map(item => <option key={item.id} value={item.id} disabled={item.sold_out && item.id !== editing.line.menu_item_id}>{item.name}{item.sold_out ? ' · 已售罄' : ''}</option>)}
+          </select></label>}
           {editing.line.is_custom ? <CustomItemForm key={`${editing.line.id}:${editing.line.revision}`} initial={editing.line}
             category={editing.line.category_code ?? 'MAINS'} busy={saveCustom.isPending} onSave={(value) => saveCustom.mutate(value)} />
-            : editingMenu ? <ItemPicker key={`${editing.line.id}:${editing.line.revision}`} initial={editing.line}
-            item={editing.line.status === 'SUBMITTED' ? { ...editingMenu, sold_out: false } : editingMenu} busy={edit.isPending}
+            : editingMenu ? <ItemPicker key={`${editing.line.id}:${editing.line.revision}:${editingMenu.id}`} initial={editing.line}
+            item={editing.line.status === 'SUBMITTED' && editingMenu.id === editing.line.menu_item_id ? { ...editingMenu, sold_out: false } : editingMenu} busy={edit.isPending}
             onAdd={(quantity, ids, notes, unitPrice) => edit.mutate({ quantity, ids, notes, unitPrice })} />
             : <p className="error">菜品已停售，当前无法修改。</p>}
         </div>
